@@ -237,24 +237,22 @@ export const useThreadsStore = defineStore('threads', () => {
     if (!payload?.pubkey) return
     // If this pubkey is already a contact, refresh its presence + encryption key.
     const existing = contacts.findByPubkey(payload.pubkey)
+    // Importante: hay que AWAIT antes de mandar el HELLO de vuelta. Si no,
+    // el otro lado recibe nuestro HELLO, manda DM_ENC, y cuando llega aquí
+    // el contacto aún no está persistido en el vault → "DM from unknown peer".
     if (existing) {
-      contacts.updateContact(payload.pubkey, {
+      await contacts.updateContact(payload.pubkey, {
         lastToken: fromToken,
         encryptionPubkey: payload.encryptionPubkey || existing.encryptionPubkey,
         nickname: existing.nickname || payload.nickname
       })
       contacts.markOnline(payload.pubkey, fromToken)
       flushOutbox()
-      // Reciprocal HELLO so the other side learns our nick/keys.
       sendHello(fromToken)
-      // Trigger rating bookkeeping
-      contacts.refreshPeers()
     } else {
-      // Stranger — record as pending contact (added via UI accept later)
-      // For now just stash on in-memory pending list via contactsStore
-      contacts.addContact({
+      await contacts.addContact({
         pubkey: payload.pubkey,
-        nickname: payload.nickname || payload.pubkey.slice(0,8),
+        nickname: payload.nickname || payload.pubkey.slice(0, 8),
         token: fromToken,
         encryptionPubkey: payload.encryptionPubkey || null
       })
@@ -299,9 +297,21 @@ export const useThreadsStore = defineStore('threads', () => {
     // Resolver al remitente: si el proxy nos da `from_publickey` (caso de
     // entrega offline o cualquier mensaje pubkey-direccionado) lo usamos
     // directamente; si no, caemos a buscar por lastToken.
-    let c = null
-    if (meta.fromPubkey) c = contacts.findByPubkey(meta.fromPubkey)
-    if (!c) c = contacts.contacts.find(x => x.lastToken === fromToken)
+    const findContact = () => {
+      let c = null
+      if (meta.fromPubkey) c = contacts.findByPubkey(meta.fromPubkey)
+      if (!c) c = contacts.contacts.find(x => x.lastToken === fromToken)
+      return c
+    }
+    let c = findContact()
+    // Si el HELLO viene en paralelo y aún no terminó, esperamos hasta 2s.
+    if (!c) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 200))
+        c = findContact()
+        if (c?.encryptionPubkey) break
+      }
+    }
     const senderEnc = c?.encryptionPubkey
     if (!c || !senderEnc) {
       console.warn('DM from unknown peer', fromToken, meta.fromPubkey || '', '— dropping until handshake')
