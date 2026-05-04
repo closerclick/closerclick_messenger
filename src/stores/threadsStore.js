@@ -3,10 +3,11 @@ import { ref, computed } from 'vue'
 import { useConnectionStore } from './connectionStore'
 import { useContactsStore } from './contactsStore'
 import { getIdentity } from '../services/identity'
+import { getStore } from '../services/store'
 import { sanitizeMessage } from '../utils/sanitize'
 
-const STORAGE_KEY = 'messenger_threads_v1'
-const MAX_THREAD = 500   // cap per-thread history
+const MAX_THREAD = 1000   // cap per-thread history (server-side cap también)
+const LEGACY_KEY = 'messenger_threads_v1'  // migración del antiguo localStorage
 
 /**
  * Thread entry shape: { id, dir: 'in'|'out', text, ts, pending?: boolean }
@@ -32,70 +33,62 @@ export const useThreadsStore = defineStore('threads', () => {
   const activeThread = computed(() => activePubkey.value ? (threads.value[activePubkey.value] || []) : [])
   const activeContact = computed(() => activePubkey.value ? contacts.findByPubkey(activePubkey.value) : null)
 
-  const load = () => {
+  // Carga inicial: pide los hilos al store remoto y, si encontramos un
+  // localStorage legacy del messenger viejo, lo migramos una vez.
+  const load = async () => {
+    const store = await getStore()
+    if (!store) { threads.value = {}; return }
+    // Migración one-time desde el localStorage del messenger antiguo
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      threads.value = raw ? JSON.parse(raw) : {}
-    } catch { threads.value = {} }
-  }
-  const isQuotaError = (e) => (
-    e && (
-      e.name === 'QuotaExceededError' ||
-      e.code === 22 || e.code === 1014 ||
-      /quota/i.test(e.message || '')
-    )
-  )
-
-  /**
-   * Drop the oldest fraction of messages across all threads.
-   * Returns true if anything was dropped.
-   */
-  const dropOldest = (fraction = 0.2) => {
-    // Flatten all entries with their thread key + index, sort by ts ascending,
-    // and drop the first N.
-    const all = []
-    for (const [pk, arr] of Object.entries(threads.value)) {
-      for (const e of arr) all.push({ pk, ts: e.ts || 0, id: e.id })
-    }
-    if (all.length === 0) return false
-    all.sort((a, b) => a.ts - b.ts)
-    const toDrop = Math.max(1, Math.floor(all.length * fraction))
-    const dropIds = new Set(all.slice(0, toDrop).map(x => x.pk + '|' + x.id))
-    for (const [pk, arr] of Object.entries(threads.value)) {
-      threads.value[pk] = arr.filter(e => !dropIds.has(pk + '|' + e.id))
-    }
-    return true
-  }
-
-  const persist = () => {
-    // Try to write; on quota overflow, evict oldest messages and retry.
-    // localStorage caps vary per browser (~5-10 MB per origin), so we don't
-    // know the exact limit — we shrink reactively until it fits.
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(threads.value))
-        return
-      } catch (e) {
-        if (!isQuotaError(e)) {
-          console.warn('persist failed:', e)
-          return
+      const legacy = localStorage.getItem(LEGACY_KEY)
+      if (legacy) {
+        const oldThreads = JSON.parse(legacy)
+        for (const [pk, arr] of Object.entries(oldThreads || {})) {
+          if (!Array.isArray(arr)) continue
+          for (const entry of arr) await store.appendMessage(pk, entry)
         }
-        if (!dropOldest(0.2)) {
-          console.warn('localStorage quota exceeded and nothing to evict')
-          return
-        }
+        localStorage.removeItem(LEGACY_KEY)
+        console.log('[threads] migrated legacy localStorage to store.closer.click')
       }
+    } catch (e) { console.warn('legacy migration failed:', e) }
+
+    // Carga el snapshot completo: para messenger es viable porque en general
+    // hay pocas conversaciones. Si crece, podemos pasar a lazy-load por hilo.
+    const summaries = await store.getThreadSummaries()
+    const next = {}
+    for (const k of Object.keys(summaries)) {
+      next[k] = await store.listThread(k)
     }
-    console.warn('persist gave up after 6 eviction rounds')
+    threads.value = next
   }
 
-  const append = (pubkey, entry) => {
+  // Apend optimista en memoria + escritura asíncrona al store remoto.
+  // El UI ve el cambio al instante; si la escritura falla queda log.
+  const append = async (pubkey, entry) => {
+    if (!entry.id) entry.id = crypto.randomUUID()
+    if (!entry.ts) entry.ts = Date.now()
     if (!threads.value[pubkey]) threads.value[pubkey] = []
     threads.value[pubkey].push(entry)
     if (threads.value[pubkey].length > MAX_THREAD) {
       threads.value[pubkey] = threads.value[pubkey].slice(-MAX_THREAD)
     }
-    persist()
+    const store = await getStore()
+    if (store) {
+      try { await store.appendMessage(pubkey, entry) }
+      catch (e) { console.warn('store.appendMessage failed:', e) }
+    }
+  }
+
+  // Actualiza un campo de una entry existente y la persiste de nuevo. Útil
+  // para marcar `pending: false` tras DM_ACK o tras envío exitoso.
+  const updateEntry = async (pubkey, entryId, patch) => {
+    const arr = threads.value[pubkey]
+    if (!arr) return
+    const e = arr.find(x => x.id === entryId)
+    if (!e) return
+    Object.assign(e, patch)
+    const store = await getStore()
+    if (store) { try { await store.appendMessage(pubkey, e) } catch (_) {} }
   }
 
   const setActive = (pubkey) => {
@@ -144,8 +137,7 @@ export const useThreadsStore = defineStore('threads', () => {
       )
       const msg = formatMessage('DM_ENC', { envelope, ts: entry.ts, mid: entry.id })
       await connection.sendByPubkey([pubkey], msg)
-      entry.pending = false
-      persist()
+      await updateEntry(pubkey, entry.id, { pending: false })
     } catch (e) {
       console.warn('sendDM failed; will retry:', e)
       outbox.value.push({ pubkey, entryId: entry.id, text: trimmed })
@@ -167,16 +159,13 @@ export const useThreadsStore = defineStore('threads', () => {
         )
         const msg = formatMessage('DM_ENC', { envelope, ts: Date.now(), mid: item.entryId })
         await connection.sendByPubkey([item.pubkey], msg)
-        const arr = threads.value[item.pubkey]
-        const e = arr?.find(x => x.id === item.entryId)
-        if (e) e.pending = false
+        await updateEntry(item.pubkey, item.entryId, { pending: false })
       } catch (err) {
         console.warn('flush failed:', err)
         remaining.push(item)
       }
     }
     outbox.value = remaining
-    persist()
   }
 
   // ------------------------------------------------------------------------
@@ -352,11 +341,11 @@ export const useThreadsStore = defineStore('threads', () => {
     } catch (e) { console.warn('decrypt failed:', e) }
   }
 
-  const handleAck = (fromToken, payload) => {
+  const handleAck = async (fromToken, payload) => {
     if (!payload?.id) return
-    for (const arr of Object.values(threads.value)) {
+    for (const [pk, arr] of Object.entries(threads.value)) {
       const e = arr.find(x => x.id === payload.id)
-      if (e) { e.pending = false; persist(); return }
+      if (e) { await updateEntry(pk, payload.id, { pending: false }); return }
     }
   }
 
@@ -403,12 +392,13 @@ export const useThreadsStore = defineStore('threads', () => {
     } catch (e) { console.warn('handleRatingReply:', e) }
   }
 
-  load()
+  // Carga asíncrona — el UI verá hilos aparecer cuando el store responda.
+  load().catch(e => console.warn('threads.load failed:', e))
 
   return {
     threads, activePubkey, activeThread, activeContact, outbox,
     setActive, sendDM, flushOutbox,
     handleIncoming, sendHello, tryHandshake,
-    askRatingsAbout
+    askRatingsAbout, load
   }
 })
