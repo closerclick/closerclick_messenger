@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useConnectionStore } from './stores/connectionStore'
 import { useContactsStore } from './stores/contactsStore'
 import { useThreadsStore } from './stores/threadsStore'
@@ -17,13 +17,55 @@ const showAdd = ref(false)
 const ratingFor = ref(null)   // pubkey or null
 const showSidebarMobile = ref(true)
 
+// PWA install prompt
+let deferredPrompt = null
+const isStandalone = ref(
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone === true
+)
+const canInstall = ref(false)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+
+const onBeforeInstallPrompt = (e) => {
+  e.preventDefault()
+  deferredPrompt = e
+  canInstall.value = true
+}
+const onAppInstalled = () => {
+  deferredPrompt = null
+  canInstall.value = false
+  isStandalone.value = true
+}
+const installApp = async () => {
+  if (deferredPrompt) {
+    deferredPrompt.prompt()
+    await deferredPrompt.userChoice
+    deferredPrompt = null
+    canInstall.value = false
+    return
+  }
+  if (isIOS) {
+    alert('Para instalar: pulsa el botón Compartir y luego "Añadir a pantalla de inicio".')
+  } else {
+    alert('Tu navegador todavía no permite la instalación automática. Usa el menú del navegador para instalar la app.')
+  }
+}
+const showInstallButton = computed(() => !isStandalone.value && (canInstall.value || isIOS))
+
 onMounted(async () => {
+  window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+  window.addEventListener('appinstalled', onAppInstalled)
   if (connection.nicknameSet) {
     await connection.connect()
     await contacts.refreshPeers()
     // After connect, announce ourselves to all known contacts via HELLO
     setTimeout(announceToKnown, 500)
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+  window.removeEventListener('appinstalled', onAppInstalled)
 })
 
 const announceToKnown = async () => {
@@ -58,6 +100,9 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
     <header class="topbar">
       <div class="brand">💬 Messenger</div>
       <div class="status">
+        <button v-if="showInstallButton" class="install-btn" @click="installApp" title="Instalar como app">
+          ⬇ Instalar
+        </button>
         <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
         <span class="who">@{{ connection.nickname }}</span>
         <code class="tok" v-if="connection.token">{{ connection.token }}</code>
@@ -103,6 +148,12 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
 .dot.on  { background: #4caf50; }
 .dot.off { background: #c44; }
 .tok { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+.install-btn {
+  background: var(--accent); color: #fff; border: 0;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; font-weight: 500;
+}
+.install-btn:hover { background: var(--accent-2); }
 .layout { flex: 1; display: flex; min-height: 0; }
 .sidebar {
   width: 320px; max-width: 35%; border-right: 1px solid var(--border);
