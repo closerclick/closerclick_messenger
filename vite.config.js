@@ -33,7 +33,7 @@ export default defineConfig({
       }
     })
   ],
-  base: '/closerclick_messenger/',
+  base: './',
   server: {
     port: 5176,
     open: true
