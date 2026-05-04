@@ -314,13 +314,15 @@ export const useThreadsStore = defineStore('threads', () => {
       // viene del flujo legacy por token, intentamos primero pubkey y luego
       // token como fallback.
       const myPub = connection.myPublickey
-      let text
+      let result
       try {
-        text = await id.decrypt(senderEnc, myPub, payload.envelope)
+        result = await id.decrypt(senderEnc, myPub, payload.envelope)
       } catch (e1) {
-        try { text = await id.decrypt(senderEnc, connection.token, payload.envelope) }
+        try { result = await id.decrypt(senderEnc, connection.token, payload.envelope) }
         catch (e2) { throw e1 }
       }
+      // El vault devuelve { plaintext }, no un string directo.
+      const text = result?.plaintext ?? ''
       append(c.publickey, {
         id: payload.mid || crypto.randomUUID(),
         dir: 'in',
