@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
-import { Identity } from '@gatoseya/closer-click-identity'
+import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
 
 export const useConnectionStore = defineStore('connection', () => {
@@ -46,8 +46,7 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   const identifyWithVault = async () => {
-    let id
-    try { id = await Identity.connect() } catch { return }
+    const id = await getIdentity()
     if (!id || !token.value) return
     // El vault entrega la pubkey en `me` durante el `ready` postMessage; no
     // hay un método getPublicKey() en la API.

@@ -1,18 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { Identity } from '@gatoseya/closer-click-identity'
 import { useConnectionStore } from './connectionStore'
+import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
 import { computeDerivedRating, buildTrustMap } from '../utils/rating'
-
-let _identity = null
-async function getIdentity () {
-  if (_identity) return _identity
-  try { _identity = await Identity.connect() } catch (e) {
-    console.warn('Identity vault unreachable:', e); _identity = null
-  }
-  return _identity
-}
 
 /**
  * Contacts live in the shared identity vault (id.closer.click) since v0.6.0,

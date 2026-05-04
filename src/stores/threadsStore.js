@@ -1,19 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { Identity } from '@gatoseya/closer-click-identity'
 import { useConnectionStore } from './connectionStore'
 import { useContactsStore } from './contactsStore'
+import { getIdentity } from '../services/identity'
 import { sanitizeMessage } from '../utils/sanitize'
 
 const STORAGE_KEY = 'messenger_threads_v1'
 const MAX_THREAD = 500   // cap per-thread history
-
-let _identity = null
-async function getIdentity () {
-  if (_identity) return _identity
-  try { _identity = await Identity.connect() } catch (e) { _identity = null }
-  return _identity
-}
 
 /**
  * Thread entry shape: { id, dir: 'in'|'out', text, ts, pending?: boolean }
