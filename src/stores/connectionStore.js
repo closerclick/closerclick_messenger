@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
+import { Identity } from '@gatoseya/closer-click-identity'
 import { sanitizeNickname } from '../utils/sanitize'
 
 export const useConnectionStore = defineStore('connection', () => {
@@ -24,6 +25,9 @@ export const useConnectionStore = defineStore('connection', () => {
     localStorage.setItem('messenger_nickname', nickname.value)
   }
 
+  const myPublickey = ref(null)
+  const queuedDelivered = ref(0)
+
   const connect = async () => {
     try {
       connectionError.value = null
@@ -32,11 +36,26 @@ export const useConnectionStore = defineStore('connection', () => {
       const assigned = await wsProxyClient.connect()
       if (assigned && !token.value) token.value = assigned
       isConnected.value = true
+      // Identificarse con la pubkey del vault para activar la cola offline.
+      identifyWithVault().catch(e => console.warn('identify failed:', e))
     } catch (e) {
       connectionError.value = e.message
       isConnected.value = false
       console.error('Connection error:', e)
     }
+  }
+
+  const identifyWithVault = async () => {
+    let id
+    try { id = await Identity.connect() } catch { return }
+    if (!id || !token.value) return
+    const publickey = await id.getPublicKey()
+    const data = { op: 'identify', publickey, token: token.value, ts: Date.now() }
+    const { signature } = await id.signData(data)
+    const result = await wsProxyClient.identify({ data, signature })
+    myPublickey.value = publickey
+    queuedDelivered.value = result?.queued_delivered || 0
+    return result
   }
 
   const disconnect = () => {
@@ -46,6 +65,7 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   const sendMessage = (toTokens, raw) => wsProxyClient.send(toTokens, raw)
+  const sendByPubkey = (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
 
   const setPresenceChannel = (name) => { presenceChannel.value = name }
 
@@ -57,9 +77,9 @@ export const useConnectionStore = defineStore('connection', () => {
       connectionError.value = err.error || err.message || 'Unknown error'
       console.error('WS error:', err)
     })
-    wsProxyClient.on('message', (fromToken, payload) => {
+    wsProxyClient.on('message', (fromToken, payload, meta) => {
       const raw = typeof payload === 'string' ? payload : JSON.stringify(payload)
-      import('./threadsStore.js').then(m => m.useThreadsStore().handleIncoming(fromToken, raw)).catch(() => {})
+      import('./threadsStore.js').then(m => m.useThreadsStore().handleIncoming(fromToken, raw, meta || {})).catch(() => {})
     })
     wsProxyClient.on('peer_disconnected', (peerToken) => {
       import('./contactsStore.js').then(m => m.useContactsStore().markOffline(peerToken)).catch(() => {})
@@ -68,6 +88,8 @@ export const useConnectionStore = defineStore('connection', () => {
 
   return {
     token, isConnected, connectionError, wsUrl, nickname, nicknameSet, presenceChannel,
-    connect, disconnect, sendMessage, setNickname, setPresenceChannel, wsProxyClient
+    myPublickey, queuedDelivered,
+    connect, disconnect, sendMessage, sendByPubkey, setNickname, setPresenceChannel, wsProxyClient,
+    identifyWithVault
   }
 })

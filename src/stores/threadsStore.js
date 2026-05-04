@@ -131,21 +131,26 @@ export const useThreadsStore = defineStore('threads', () => {
     const entry = { id: crypto.randomUUID(), dir: 'out', text: trimmed, ts: Date.now(), pending: true }
     append(pubkey, entry)
 
-    const recipientToken = contacts.tokenFor(pubkey)
-    if (!recipientToken || !contact.encryptionPubkey) {
-      // queue for delivery when contact comes online + handshakes
+    if (!contact.encryptionPubkey) {
+      // No conocemos su clave de cifrado todavía — queda en outbox local
+      // hasta completar el handshake.
       outbox.value.push({ pubkey, entryId: entry.id, text: trimmed })
       return
     }
     try {
       const id = await getIdentity()
       if (!id) throw new Error('Identity vault no disponible')
+      // El proxy direcciona por pubkey: si está online, entrega al instante;
+      // si no, encola hasta 24h. El "token" del wrap puede ser cualquier
+      // identificador estable: usamos la pubkey del destinatario para que
+      // sea el mismo valor al cifrar y al descifrar (vault.decrypt usa
+      // myToken como key del wrap).
       const envelope = await id.encrypt(
-        [{ token: recipientToken, encryptionPubkey: contact.encryptionPubkey }],
+        [{ token: pubkey, encryptionPubkey: contact.encryptionPubkey }],
         trimmed
       )
       const msg = formatMessage('DM_ENC', { envelope, ts: entry.ts, mid: entry.id })
-      await connection.sendMessage([recipientToken], msg)
+      await connection.sendByPubkey([pubkey], msg)
       entry.pending = false
       persist()
     } catch (e) {
@@ -159,17 +164,16 @@ export const useThreadsStore = defineStore('threads', () => {
     const remaining = []
     for (const item of outbox.value) {
       const c = contacts.findByPubkey(item.pubkey)
-      const token = contacts.tokenFor(item.pubkey)
-      if (!c || !token || !c.encryptionPubkey) { remaining.push(item); continue }
+      if (!c || !c.encryptionPubkey) { remaining.push(item); continue }
       try {
         const id = await getIdentity()
         if (!id) { remaining.push(item); continue }
         const envelope = await id.encrypt(
-          [{ token, encryptionPubkey: c.encryptionPubkey }],
+          [{ token: item.pubkey, encryptionPubkey: c.encryptionPubkey }],
           item.text
         )
         const msg = formatMessage('DM_ENC', { envelope, ts: Date.now(), mid: item.entryId })
-        await connection.sendMessage([token], msg)
+        await connection.sendByPubkey([item.pubkey], msg)
         const arr = threads.value[item.pubkey]
         const e = arr?.find(x => x.id === item.entryId)
         if (e) e.pending = false
@@ -220,14 +224,14 @@ export const useThreadsStore = defineStore('threads', () => {
   // Inbound dispatch
   // ------------------------------------------------------------------------
 
-  const handleIncoming = async (fromToken, raw) => {
+  const handleIncoming = async (fromToken, raw, meta = {}) => {
     const { type, payload } = parseMessage(raw)
     if (!type || !payload) return
     switch (type) {
-      case 'HELLO':                return handleHello(fromToken, payload)
+      case 'HELLO':                return handleHello(fromToken, payload, meta)
       case 'IDENTIFY_CHALLENGE':   return handleChallenge(fromToken, payload)
       case 'IDENTIFY_RESPONSE':    return handleResponse(fromToken, payload)
-      case 'DM_ENC':               return handleDM(fromToken, payload)
+      case 'DM_ENC':               return handleDM(fromToken, payload, meta)
       case 'DM_ACK':               return handleAck(fromToken, payload)
       case 'RATING_QUERY':         return handleRatingQuery(fromToken, payload)
       case 'RATING_REPLY':         return handleRatingReply(fromToken, payload)
@@ -295,28 +299,48 @@ export const useThreadsStore = defineStore('threads', () => {
     } catch (e) { console.warn('verifyResponse:', e) }
   }
 
-  const handleDM = async (fromToken, payload) => {
+  const handleDM = async (fromToken, payload, meta = {}) => {
     if (!payload?.envelope) return
-    // Identify sender by encryption pubkey baked into the envelope wrap entry.
-    const c = contacts.contacts.find(x => x.lastToken === fromToken)
+    // Resolver al remitente: si el proxy nos da `from_publickey` (caso de
+    // entrega offline o cualquier mensaje pubkey-direccionado) lo usamos
+    // directamente; si no, caemos a buscar por lastToken.
+    let c = null
+    if (meta.fromPubkey) c = contacts.findByPubkey(meta.fromPubkey)
+    if (!c) c = contacts.contacts.find(x => x.lastToken === fromToken)
     const senderEnc = c?.encryptionPubkey
     if (!c || !senderEnc) {
-      console.warn('DM from unknown peer', fromToken, '— dropping until handshake')
+      console.warn('DM from unknown peer', fromToken, meta.fromPubkey || '', '— dropping until handshake')
       return
     }
     try {
       const id = await getIdentity()
       if (!id) return
-      const text = await id.decrypt(senderEnc, connection.token, payload.envelope)
+      // El wrap key es la pubkey del receptor (myPublickey). Si el sobre
+      // viene del flujo legacy por token, intentamos primero pubkey y luego
+      // token como fallback.
+      const myPub = connection.myPublickey
+      let text
+      try {
+        text = await id.decrypt(senderEnc, myPub, payload.envelope)
+      } catch (e1) {
+        try { text = await id.decrypt(senderEnc, connection.token, payload.envelope) }
+        catch (e2) { throw e1 }
+      }
       append(c.publickey, {
         id: payload.mid || crypto.randomUUID(),
         dir: 'in',
         text: sanitizeMessage(text),
-        ts: payload.ts || Date.now()
+        ts: payload.ts || Date.now(),
+        queued: !!meta.queued,
+        queuedAt: meta.queuedAt || null
       })
-      // Optional ack
+      // Optional ack — si conocemos token actual, lo mandamos por token;
+      // si no, por pubkey (el ack también puede irse offline).
       if (payload.mid) {
-        await connection.sendMessage([fromToken], formatMessage('DM_ACK', { id: payload.mid }))
+        const ack = formatMessage('DM_ACK', { id: payload.mid })
+        const tk = contacts.tokenFor(c.publickey)
+        if (tk) await connection.sendMessage([tk], ack)
+        else    await connection.sendByPubkey([c.publickey], ack)
       }
     } catch (e) { console.warn('decrypt failed:', e) }
   }
