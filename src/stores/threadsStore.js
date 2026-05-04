@@ -221,6 +221,7 @@ export const useThreadsStore = defineStore('threads', () => {
 
   const handleIncoming = async (fromToken, raw, meta = {}) => {
     const { type, payload } = parseMessage(raw)
+    console.log('[threads] inbound', { fromToken, type, hasPayload: !!payload, metaFromPubkey: !!meta?.fromPubkey, raw: raw?.slice?.(0, 80) })
     if (!type || !payload) return
     switch (type) {
       case 'HELLO':                return handleHello(fromToken, payload, meta)
@@ -234,6 +235,7 @@ export const useThreadsStore = defineStore('threads', () => {
   }
 
   const handleHello = async (fromToken, payload) => {
+    console.log('[threads] handleHello', { fromToken, pkSlice: payload?.pubkey?.slice?.(0, 50), nick: payload?.nickname })
     if (!payload?.pubkey) return
     // If this pubkey is already a contact, refresh its presence + encryption key.
     const existing = contacts.findByPubkey(payload.pubkey)
