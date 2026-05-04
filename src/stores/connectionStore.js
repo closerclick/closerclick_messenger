@@ -49,7 +49,13 @@ export const useConnectionStore = defineStore('connection', () => {
     let id
     try { id = await Identity.connect() } catch { return }
     if (!id || !token.value) return
-    const publickey = await id.getPublicKey()
+    // El vault entrega la pubkey en `me` durante el `ready` postMessage; no
+    // hay un método getPublicKey() en la API.
+    const publickey = id.me?.publickey
+    if (!publickey) {
+      console.warn('vault me.publickey no disponible — saltando identify')
+      return
+    }
     const data = { op: 'identify', publickey, token: token.value, ts: Date.now() }
     const { signature } = await id.signData(data)
     const result = await wsProxyClient.identify({ data, signature })
