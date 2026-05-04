@@ -202,9 +202,11 @@ export const useThreadsStore = defineStore('threads', () => {
     try {
       const id = await getIdentity()
       if (!id) return
-      const [pubkey, encryptionPubkey] = await Promise.all([
-        id.getPublicKey(), id.getEncryptionPubkey()
-      ])
+      // La signing pubkey vive en `id.me` (entregada en el evento `ready`),
+      // no hay método getPublicKey(). La encryption pubkey sí es RPC.
+      const pubkey = id.me?.publickey
+      if (!pubkey) return
+      const encryptionPubkey = await id.getEncryptionPubkey()
       const msg = formatMessage('HELLO', {
         nickname: connection.nickname,
         pubkey, encryptionPubkey
