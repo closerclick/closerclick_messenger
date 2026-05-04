@@ -322,14 +322,35 @@ export const useThreadsStore = defineStore('threads', () => {
       }
       // El vault devuelve { plaintext }, no un string directo.
       const text = result?.plaintext ?? ''
-      append(c.publickey, {
+      const cleanText = sanitizeMessage(text)
+      const entry = {
         id: payload.mid || crypto.randomUUID(),
         dir: 'in',
-        text: sanitizeMessage(text),
+        text: cleanText,
         ts: payload.ts || Date.now(),
         queued: !!meta.queued,
         queuedAt: meta.queuedAt || null
-      })
+      }
+      append(c.publickey, entry)
+
+      // Si el PWA está embebido (extensión / future apps), notifica al parent
+      // para que pueda disparar toast/notificación nativa.
+      if (window !== window.parent) {
+        try {
+          window.parent.postMessage({
+            source: 'cc-messenger',
+            type: 'dm-arrived',
+            dm: {
+              id: entry.id,
+              fromPubkey: c.publickey,
+              fromNickname: c.nickname || c.publickey.slice(0, 8),
+              text: cleanText,
+              ts: entry.ts,
+              queued: entry.queued
+            }
+          }, '*')
+        } catch (_) {}
+      }
       // Optional ack — si conocemos token actual, lo mandamos por token;
       // si no, por pubkey (el ack también puede irse offline).
       if (payload.mid) {
