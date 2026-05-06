@@ -8,12 +8,14 @@ import ContactList from './components/ContactList.vue'
 import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
+import SyncSettingsModal from './components/SyncSettingsModal.vue'
 
 const connection = useConnectionStore()
 const contacts = useContactsStore()
 const threads = useThreadsStore()
 
 const showAdd = ref(false)
+const showSync = ref(false)
 const ratingFor = ref(null)   // pubkey or null
 const showSidebarMobile = ref(true)
 
@@ -103,6 +105,7 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
         <button v-if="showInstallButton" class="install-btn" @click="installApp" title="Instalar como app">
           ⬇ Instalar
         </button>
+        <button class="sync-btn" @click="showSync = true" title="Sincronizar con Google Drive">☁️</button>
         <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
         <span class="who">@{{ connection.nickname }}</span>
         <code class="tok" v-if="connection.token">{{ connection.token }}</code>
@@ -133,6 +136,7 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
 
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
+    <SyncSettingsModal v-if="showSync" @close="showSync = false" />
   </div>
 </template>
 
@@ -154,6 +158,11 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
   font-size: 13px; font-weight: 500;
 }
 .install-btn:hover { background: var(--accent-2); }
+.sync-btn {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer; font-size: 14px;
+}
+.sync-btn:hover { background: var(--bg-3); }
 .layout { flex: 1; display: flex; min-height: 0; }
 .sidebar {
   width: 320px; max-width: 35%; border-right: 1px solid var(--border);

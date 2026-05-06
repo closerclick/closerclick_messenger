@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@gatoseya/closer-click-identity": "^0.7.1",
+    "@gatoseya/closer-click-identity": "^0.8.0",
     "@gatoseya/closer-click-proxy-client": "^0.4.0",
-    "@gatoseya/closer-click-store": "^0.1.0",
+    "@gatoseya/closer-click-store": "^0.2.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.25"
   },

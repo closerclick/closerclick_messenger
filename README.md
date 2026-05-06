@@ -17,6 +17,23 @@ Ambos comparten **identidad** (`id.closer.click`) y **histórico de mensajes** (
 - **Cola offline 24h** del proxy, multi-instancia con fan-out (web + extensión reciben el mismo DM).
 - **PWA**: instalable en móvil; sin cache.
 - **Ranking integrado**: rating propio (★ oro) y derivado por endorsements firmados (★ azul).
+- **Auto-sync con Google Drive** (botón ☁️ en topbar): backup cifrado + sincronización multi-dispositivo de identidad y mensajes. Pasphrase ≥12 chars derivada por PBKDF2; AES-256-GCM. Google solo ve bytes opacos en `appDataFolder`.
+
+### Configuración OAuth (para que el sync funcione)
+
+El sync requiere un Google OAuth Client ID. Configurarlo:
+
+1. **Crear el cliente** en [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth client ID → Web application.
+2. **Authorized JavaScript origins**: añadir `https://id.closer.click`, `https://store.closer.click`, `https://messenger.closer.click` y `http://localhost:5173` (dev).
+3. **Scope** (en OAuth consent screen): solo `https://www.googleapis.com/auth/drive.appdata`.
+4. **Habilitar** Google Drive API en el proyecto (Library → enable).
+5. Copiar el Client ID al `.env.local`:
+   ```
+   VITE_GOOGLE_OAUTH_CLIENT_ID=xxxxxxxxxxxx-xxxxxxxxxx.apps.googleusercontent.com
+   ```
+6. Para el deploy: GitHub repo → Settings → Environments → `PRODUCTION` → secret `VITE_GOOGLE_OAUTH_CLIENT_ID`. El workflow lo inyecta en build.
+
+El Client Secret **no se usa** (browser flow vía Google Identity Services).
 
 ### Desarrollo
 
