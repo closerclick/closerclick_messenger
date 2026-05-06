@@ -16,10 +16,9 @@ const threads = useThreadsStore()
 
 const showAdd = ref(false)
 const showSync = ref(false)
-const ratingFor = ref(null)   // pubkey or null
+const ratingFor = ref(null)
 const showSidebarMobile = ref(true)
 
-// PWA install prompt
 let deferredPrompt = null
 const isStandalone = ref(
   window.matchMedia('(display-mode: standalone)').matches ||
@@ -60,7 +59,6 @@ onMounted(async () => {
   if (connection.nicknameSet) {
     await connection.connect()
     await contacts.refreshPeers()
-    // After connect, announce ourselves to all known contacts via HELLO
     setTimeout(announceToKnown, 500)
   }
 })
@@ -72,9 +70,7 @@ onUnmounted(() => {
 
 const announceToKnown = async () => {
   for (const c of contacts.contacts) {
-    if (c.lastToken) {
-      threads.sendHello(c.lastToken)
-    }
+    if (c.lastToken) threads.sendHello(c.lastToken)
   }
 }
 
@@ -91,24 +87,31 @@ const onSelectContact = (pubkey) => {
 }
 
 const backToList = () => { showSidebarMobile.value = true; threads.setActive(null) }
-
 const openRating = (pubkey) => { ratingFor.value = pubkey }
+
+// avatar initials helper
+const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase()
 </script>
 
 <template>
   <NicknameModal v-if="!connection.nicknameSet" @set="handleNicknameSet" />
 
-  <div v-else class="messenger">
+  <div v-else class="app">
     <header class="topbar">
-      <div class="brand">💬 Messenger</div>
+      <div class="brand">
+        <span class="logo">CC</span>
+        <span class="brand-name">Closer Click</span>
+      </div>
       <div class="status">
         <button v-if="showInstallButton" class="install-btn" @click="installApp" title="Instalar como app">
           ⬇ Instalar
         </button>
-        <button class="sync-btn" @click="showSync = true" title="Tu cuenta (Google)">👤</button>
-        <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
-        <span class="who">@{{ connection.nickname }}</span>
-        <code class="tok" v-if="connection.token">{{ connection.token }}</code>
+        <div class="me">
+          <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
+          <span class="who">@{{ connection.nickname }}</span>
+          <code class="tok" v-if="connection.token">{{ connection.token }}</code>
+        </div>
+        <button class="me-avatar" @click="showSync = true" :title="'Tu cuenta'">{{ initials(connection.nickname) }}</button>
       </div>
     </header>
 
@@ -128,8 +131,12 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
           @rate="openRating"
         />
         <div v-else class="empty">
-          <p>Selecciona un contacto para chatear</p>
-          <p class="hint">o pulsa <strong>+</strong> para añadir uno por token.</p>
+          <div class="empty-card">
+            <div class="empty-mark">CC</div>
+            <h4>Selecciona un contacto</h4>
+            <p>Para empezar una conversación, elige a alguien de la lista,
+               o pulsa <strong>+</strong> para añadir un nuevo contacto por token.</p>
+          </div>
         </div>
       </section>
     </main>
@@ -141,49 +148,155 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
 </template>
 
 <style scoped>
-.messenger { display: flex; flex-direction: column; height: 100vh; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 16px; background: var(--bg-2); border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.brand { font-weight: 600; }
-.status { display: flex; gap: 8px; align-items: center; font-size: 14px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot.on  { background: #4caf50; }
-.dot.off { background: #c44; }
-.tok { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  background: var(--accent); color: var(--on-accent);
+  border-radius: 10px;
+  font-family: var(--font-headline);
+  font-weight: 700; font-size: 14px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 1px 2px rgba(192, 57, 43, 0.25);
+}
+.brand-name {
+  font-family: var(--font-headline);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.status { display: flex; gap: 12px; align-items: center; }
+
+.me {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-3);
+  border-radius: 999px;
+  font-size: 13px;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.on  { background: var(--online); box-shadow: 0 0 0 2px rgba(90, 138, 58, 0.18); }
+.dot.off { background: var(--accent); opacity: 0.6; }
+.who { color: var(--text); font-weight: 500; }
+.tok {
+  background: var(--bg-1);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
 .install-btn {
-  background: var(--accent); color: #fff; border: 0;
-  padding: 6px 12px; border-radius: 6px; cursor: pointer;
-  font-size: 13px; font-weight: 500;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 150ms ease-out;
 }
-.install-btn:hover { background: var(--accent-2); }
-.sync-btn {
-  background: transparent; border: 1px solid var(--border); border-radius: 6px;
-  padding: 4px 8px; cursor: pointer; font-size: 14px;
+.install-btn:hover { background: rgba(192, 57, 43, 0.08); }
+
+.me-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-4); color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-headline);
+  font-weight: 600;
+  font-size: 13px;
+  transition: transform 150ms ease-out, border-color 150ms ease-out;
 }
-.sync-btn:hover { background: var(--bg-3); }
+.me-avatar:hover { border-color: var(--accent); transform: translateY(-1px); }
+
 .layout { flex: 1; display: flex; min-height: 0; }
 .sidebar {
-  width: 320px; max-width: 35%; border-right: 1px solid var(--border);
+  width: 320px;
+  max-width: 35%;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
 }
 .side-head {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
 }
-.side-head h3 { margin: 0; font-size: 16px; }
+.side-head h3 {
+  margin: 0;
+  font-family: var(--font-headline);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
 .add-btn {
-  background: var(--accent); color: #fff; border: 0; width: 32px; height: 32px;
-  border-radius: 50%; font-size: 18px; cursor: pointer;
+  background: var(--accent); color: var(--on-accent);
+  border: 0;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease-out, transform 100ms ease-out;
+  box-shadow: 0 1px 3px rgba(192, 57, 43, 0.25);
 }
-.main-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.add-btn:hover { background: var(--accent-2); }
+.add-btn:active { transform: translateY(1px); }
+
+.main-pane {
+  flex: 1;
+  display: flex; flex-direction: column;
+  min-width: 0;
+  background: var(--bg-1);
+}
 .empty {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; color: var(--muted); padding: 24px;
-  text-align: center;
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px;
 }
-.empty .hint { font-size: 14px; margin-top: 8px; }
+.empty-card {
+  text-align: center;
+  max-width: 380px;
+  padding: 32px;
+  background: var(--bg-2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.empty-mark {
+  width: 56px; height: 56px;
+  margin: 0 auto 16px;
+  background: var(--accent); color: var(--on-accent);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-headline); font-weight: 700; font-size: 18px;
+}
+.empty-card h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-headline);
+  font-size: 18px;
+  font-weight: 600;
+}
+.empty-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 @media (max-width: 700px) {
   .sidebar { max-width: 100%; width: 100%; }
@@ -192,5 +305,8 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
   .layout .main-pane { display: flex; }
   .layout.show-side .sidebar  { display: flex; }
   .layout.show-side .main-pane { display: none; }
+  .topbar { padding: 10px 14px; }
+  .brand-name { display: none; }
+  .me .tok { display: none; }
 }
 </style>

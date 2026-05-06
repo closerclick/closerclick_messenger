@@ -1,14 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
 
 const emit = defineEmits(['close'])
 
-// Read OAuth client ID from build-time env. Configure in messenger's .env:
-//   VITE_GOOGLE_OAUTH_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
-// Both vault origins (id.closer.click + store.closer.click) must be
-// added as Authorized JavaScript Origins in the Google Cloud Console.
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || ''
 
 const passphrase = ref('')
@@ -66,7 +62,7 @@ async function unlock () {
   error.value = ''
   if (passphrase.value.length < 12) { error.value = 'Mínimo 12 caracteres'; return }
   if (passphrase2.value && passphrase.value !== passphrase2.value) {
-    error.value = 'Las passphrases no coinciden'; return
+    error.value = 'Las contraseñas no coinciden'; return
   }
   busy.value = true
   try {
@@ -100,109 +96,287 @@ async function syncNow () {
   finally { busy.value = false }
 }
 
-function statusLabel (s) {
-  if (!s.connected) return '⚪ Sin cuenta'
-  if (!s.unlocked) return '🔒 Bloqueado'
-  if (s.dirty) return '🔄 Guardando…'
-  return '✅ Al día'
+const allConnected = computed(() => idStatus.value.connected && stStatus.value.connected)
+const allUnlocked = computed(() => idStatus.value.unlocked && stStatus.value.unlocked)
+
+function vaultStatus (s) {
+  if (!s.connected) return { label: 'Sin cuenta', tone: 'neutral' }
+  if (!s.unlocked)  return { label: 'Bloqueado',  tone: 'amber' }
+  if (s.dirty)      return { label: 'Guardando…', tone: 'amber' }
+  return { label: 'Al día', tone: 'green' }
 }
 </script>
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="modal">
-      <header>
-        <h3>Tu cuenta</h3>
-        <button class="x" @click="emit('close')">×</button>
+      <header class="head">
+        <h2>Tu cuenta</h2>
+        <button class="x" @click="emit('close')" aria-label="Cerrar">×</button>
       </header>
 
-      <p class="desc">
-        Inicia sesión con Google para que tus claves, contactos e historial vivan en
-        <strong>tu Google Drive</strong> y estén disponibles en cualquier dispositivo donde
-        entres con la misma cuenta. Tus datos se cifran con tu <strong>contraseña personal</strong>
-        antes de subir, así que ni Google ni nosotros podemos leerlos. Si olvidas la
-        contraseña, no hay forma de recuperarlos.
-      </p>
+      <div class="body">
+        <p class="intro">
+          Inicia sesión con Google para que tus claves, contactos e historial vivan en
+          <strong>tu Drive privado</strong> y estén disponibles en cualquier dispositivo
+          donde entres con la misma cuenta. Tus datos se cifran con tu contraseña personal
+          antes de subir — ni Google ni nosotros podemos leerlos.
+        </p>
 
-      <div class="row">
-        <div class="vault-status">
-          <div><b>Identidad</b></div>
-          <div>{{ statusLabel(idStatus) }}</div>
+        <!-- Vault status row -->
+        <div class="vaults">
+          <div class="vault-card">
+            <div class="vault-name">Identidad</div>
+            <div :class="['vault-status', vaultStatus(idStatus).tone]">
+              <span class="dot"></span>
+              {{ vaultStatus(idStatus).label }}
+            </div>
+          </div>
+          <div class="vault-card">
+            <div class="vault-name">Mensajes</div>
+            <div :class="['vault-status', vaultStatus(stStatus).tone]">
+              <span class="dot"></span>
+              {{ vaultStatus(stStatus).label }}
+            </div>
+          </div>
         </div>
-        <div class="vault-status">
-          <div><b>Mensajes</b></div>
-          <div>{{ statusLabel(stStatus) }}</div>
+
+        <!-- Step 1: connect Google -->
+        <div v-if="!allConnected" class="step">
+          <button :disabled="busy" class="btn primary-cta" @click="connectGoogle">
+            <span class="g">G</span> Iniciar sesión con Google
+          </button>
         </div>
-      </div>
 
-      <div v-if="!idStatus.connected || !stStatus.connected" class="actions">
-        <button :disabled="busy" @click="connectGoogle">Iniciar sesión con Google</button>
-      </div>
+        <!-- Step 2: unlock with passphrase -->
+        <div v-else-if="!allUnlocked" class="step">
+          <label class="field">
+            <span class="field-label">Contraseña personal</span>
+            <input
+              :type="showPassphrase ? 'text' : 'password'"
+              v-model="passphrase"
+              autocomplete="off"
+              placeholder="Mínimo 12 caracteres"
+              class="mono"
+            />
+          </label>
+          <label class="field">
+            <span class="field-label">Confirmar (solo primera vez)</span>
+            <input
+              :type="showPassphrase ? 'text' : 'password'"
+              v-model="passphrase2"
+              autocomplete="off"
+              class="mono"
+            />
+          </label>
+          <label class="show-pw">
+            <input type="checkbox" v-model="showPassphrase" />
+            Mostrar contraseña
+          </label>
 
-      <div v-else-if="!idStatus.unlocked || !stStatus.unlocked" class="unlock">
-        <label>
-          Contraseña personal
-          <input :type="showPassphrase ? 'text' : 'password'" v-model="passphrase" autocomplete="off" />
-        </label>
-        <label>
-          Confirmar (solo primera vez)
-          <input :type="showPassphrase ? 'text' : 'password'" v-model="passphrase2" autocomplete="off" />
-        </label>
-        <label class="show-pw">
-          <input type="checkbox" v-model="showPassphrase" />
-          Mostrar contraseña
-        </label>
-        <div class="actions">
-          <button :disabled="busy" @click="unlock">Entrar</button>
-          <button :disabled="busy" class="ghost" @click="disconnectGoogle">Cerrar sesión Google</button>
+          <div class="warning">
+            <span class="warn-icon">⚠</span>
+            <p>
+              Si la olvidas, tus datos cifrados son <strong>irrecuperables</strong>.
+              Anótala en un lugar seguro.
+            </p>
+          </div>
+
+          <div class="actions">
+            <button class="btn secondary" :disabled="busy" @click="disconnectGoogle">Cerrar sesión Google</button>
+            <button class="btn" :disabled="busy" @click="unlock">Entrar</button>
+          </div>
         </div>
+
+        <!-- Step 3: synced -->
+        <div v-else class="step">
+          <div class="chips">
+            <span class="chip">📥 Sincronización automática</span>
+            <span class="chip">⌬ AES-256-GCM</span>
+            <span class="chip">☁️ Drive privado</span>
+          </div>
+          <div class="actions">
+            <button class="btn secondary" :disabled="busy" @click="lock">Bloquear</button>
+            <button class="btn secondary" :disabled="busy" @click="disconnectGoogle">Cerrar sesión</button>
+            <button class="btn" :disabled="busy" @click="syncNow">Actualizar ahora</button>
+          </div>
+        </div>
+
+        <p v-if="error" class="error">{{ error }}</p>
+        <p v-if="lastEvent" class="event">
+          <code>{{ lastEvent.kind }} → {{ lastEvent.status }}</code>
+          <span v-if="lastEvent.error"> — {{ lastEvent.error }}</span>
+        </p>
       </div>
 
-      <div v-else class="actions">
-        <button :disabled="busy" @click="syncNow">Actualizar ahora</button>
-        <button :disabled="busy" class="ghost" @click="lock">Bloquear</button>
-        <button :disabled="busy" class="ghost" @click="disconnectGoogle">Cerrar sesión Google</button>
-      </div>
-
-      <div v-if="error" class="error">{{ error }}</div>
-      <div v-if="lastEvent" class="event">
-        <code>{{ lastEvent.kind }} → {{ lastEvent.status }}</code>
-        <span v-if="lastEvent.error"> — {{ lastEvent.error }}</span>
-      </div>
+      <footer class="foot">
+        <span class="foot-text">
+          Tus datos viven en una carpeta privada de tu Drive (<code>appDataFolder</code>, oculta).
+        </span>
+      </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
-.modal-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-  display: flex; align-items: center; justify-content: center; z-index: 1000;
+.modal { max-width: 480px; }
+
+.head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
 }
-.modal {
-  background: var(--bg-1, #fff); color: var(--fg, #222);
-  width: min(480px, 92vw); border-radius: 10px; padding: 20px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+.x {
+  background: transparent; border: 0;
+  font-size: 24px; cursor: pointer;
+  color: var(--muted);
+  width: 32px; height: 32px;
+  border-radius: 8px;
 }
-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-header h3 { margin: 0; font-size: 18px; }
-.x { background: transparent; border: 0; font-size: 24px; cursor: pointer; color: inherit; }
-.desc { font-size: 13px; line-height: 1.5; color: var(--muted, #666); margin: 0 0 16px; }
-.row { display: flex; gap: 12px; margin-bottom: 16px; }
-.vault-status { flex: 1; padding: 10px; background: var(--bg-2, #f5f5f5); border-radius: 6px; font-size: 13px; }
-.unlock label { display: block; font-size: 13px; margin-bottom: 8px; }
-.unlock input[type=password], .unlock input[type=text] {
-  display: block; width: 100%; padding: 8px; margin-top: 4px;
-  border: 1px solid var(--border, #ddd); border-radius: 4px; font-family: monospace;
+.x:hover { background: var(--bg-3); color: var(--text); }
+
+.body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+
+.intro {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.55;
 }
-.show-pw { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.actions button {
-  background: var(--accent, #2196f3); color: #fff; border: 0;
-  padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 14px;
+.intro strong { color: var(--text); }
+
+/* Vault status cards */
+.vaults { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vault-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
 }
-.actions button.ghost { background: transparent; color: var(--accent, #2196f3); border: 1px solid currentColor; }
-.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-.error { margin-top: 12px; color: #c44; font-size: 13px; }
-.event { margin-top: 12px; font-size: 12px; color: var(--muted, #888); }
-.event code { background: var(--bg-3, #eee); padding: 1px 4px; border-radius: 3px; }
+.vault-name {
+  font-family: var(--font-headline);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.vault-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px;
+}
+.vault-status .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.vault-status.green   .dot { background: var(--online); }
+.vault-status.amber   .dot { background: var(--gold); }
+.vault-status.neutral .dot { background: var(--bg-4); }
+.vault-status.green   { color: var(--online); }
+.vault-status.amber   { color: #a87c1d; }
+.vault-status.neutral { color: var(--muted); }
+
+/* Step (CTA / form / synced) */
+.step { display: flex; flex-direction: column; gap: 12px; }
+
+.primary-cta {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 10px;
+}
+.primary-cta .g {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  background: #ffffff; color: var(--accent);
+  border-radius: 50%;
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.field { display: block; }
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.field input { width: 100%; }
+.mono { font-family: var(--font-mono); }
+
+.show-pw {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.show-pw input { width: auto; }
+
+.warning {
+  display: flex; gap: 10px;
+  background: #f7e6d2;
+  border-left: 3px solid #c89738;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.warn-icon { color: #a87c1d; font-size: 16px; flex-shrink: 0; }
+.warning p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.warning strong { color: var(--accent); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+}
+.actions .btn { font-size: 13px; padding: 8px 14px; }
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.event {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.event code {
+  background: var(--bg-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.foot {
+  padding: 14px 24px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+}
+.foot-text {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.foot-text code {
+  background: var(--bg-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
 </style>
