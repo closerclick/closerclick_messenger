@@ -17,7 +17,7 @@ Ambos comparten **identidad** (`id.closer.click`) y **histórico de mensajes** (
 - **Cola offline 24h** del proxy, multi-instancia con fan-out (web + extensión reciben el mismo DM).
 - **PWA**: instalable en móvil; sin cache.
 - **Ranking integrado**: rating propio (★ oro) y derivado por endorsements firmados (★ azul).
-- **Auto-sync con Google Drive** (botón ☁️ en topbar): backup cifrado + sincronización multi-dispositivo de identidad y mensajes. Pasphrase ≥12 chars derivada por PBKDF2; AES-256-GCM. Google solo ve bytes opacos en `appDataFolder`.
+- **Cuenta Google como almacén principal** (botón 👤 en topbar): el usuario inicia sesión con Google y sus claves/contactos/historial viven en su Drive (carpeta privada `appDataFolder`), disponibles en cualquier dispositivo donde entre con la misma cuenta. Los datos se cifran en el navegador con la contraseña personal del usuario (PBKDF2 600 000 iter + AES-256-GCM) antes de subir — Google solo ve bytes opacos. El localStorage local actúa como working copy offline-first; al conectar se merge con la versión remota.
 
 ### Configuración OAuth (para que el sync funcione)
 

@@ -101,10 +101,10 @@ async function syncNow () {
 }
 
 function statusLabel (s) {
-  if (!s.connected) return '⚪ No conectado a Google'
-  if (!s.unlocked) return '🔒 Conectado, bloqueado'
-  if (s.dirty) return '🔄 Cambios pendientes'
-  return '✅ Sincronizado'
+  if (!s.connected) return '⚪ Sin cuenta'
+  if (!s.unlocked) return '🔒 Bloqueado'
+  if (s.dirty) return '🔄 Guardando…'
+  return '✅ Al día'
 }
 </script>
 
@@ -112,15 +112,16 @@ function statusLabel (s) {
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="modal">
       <header>
-        <h3>Sincronización con Google Drive</h3>
+        <h3>Tu cuenta</h3>
         <button class="x" @click="emit('close')">×</button>
       </header>
 
       <p class="desc">
-        Tus claves, contactos e historial de mensajes se cifran en tu navegador con tu
-        <strong>passphrase</strong> y se guardan en una carpeta privada de tu Google Drive
-        (<code>appDataFolder</code>, invisible y reservada para esta app). Google nunca ve
-        tus datos en claro. Si pierdes la passphrase, el backup es irrecuperable.
+        Inicia sesión con Google para que tus claves, contactos e historial vivan en
+        <strong>tu Google Drive</strong> y estén disponibles en cualquier dispositivo donde
+        entres con la misma cuenta. Tus datos se cifran con tu <strong>contraseña personal</strong>
+        antes de subir, así que ni Google ni nosotros podemos leerlos. Si olvidas la
+        contraseña, no hay forma de recuperarlos.
       </p>
 
       <div class="row">
@@ -135,12 +136,12 @@ function statusLabel (s) {
       </div>
 
       <div v-if="!idStatus.connected || !stStatus.connected" class="actions">
-        <button :disabled="busy" @click="connectGoogle">Conectar Google Drive</button>
+        <button :disabled="busy" @click="connectGoogle">Iniciar sesión con Google</button>
       </div>
 
       <div v-else-if="!idStatus.unlocked || !stStatus.unlocked" class="unlock">
         <label>
-          Passphrase
+          Contraseña personal
           <input :type="showPassphrase ? 'text' : 'password'" v-model="passphrase" autocomplete="off" />
         </label>
         <label>
@@ -149,23 +150,23 @@ function statusLabel (s) {
         </label>
         <label class="show-pw">
           <input type="checkbox" v-model="showPassphrase" />
-          Mostrar passphrase
+          Mostrar contraseña
         </label>
         <div class="actions">
-          <button :disabled="busy" @click="unlock">Desbloquear</button>
-          <button :disabled="busy" class="ghost" @click="disconnectGoogle">Desconectar Google</button>
+          <button :disabled="busy" @click="unlock">Entrar</button>
+          <button :disabled="busy" class="ghost" @click="disconnectGoogle">Cerrar sesión Google</button>
         </div>
       </div>
 
       <div v-else class="actions">
-        <button :disabled="busy" @click="syncNow">Sincronizar ahora</button>
+        <button :disabled="busy" @click="syncNow">Actualizar ahora</button>
         <button :disabled="busy" class="ghost" @click="lock">Bloquear</button>
-        <button :disabled="busy" class="ghost" @click="disconnectGoogle">Desconectar Google</button>
+        <button :disabled="busy" class="ghost" @click="disconnectGoogle">Cerrar sesión Google</button>
       </div>
 
       <div v-if="error" class="error">{{ error }}</div>
       <div v-if="lastEvent" class="event">
-        Último evento: <code>{{ lastEvent.kind }} → {{ lastEvent.status }}</code>
+        <code>{{ lastEvent.kind }} → {{ lastEvent.status }}</code>
         <span v-if="lastEvent.error"> — {{ lastEvent.error }}</span>
       </div>
     </div>

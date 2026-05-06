@@ -105,7 +105,7 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
         <button v-if="showInstallButton" class="install-btn" @click="installApp" title="Instalar como app">
           ⬇ Instalar
         </button>
-        <button class="sync-btn" @click="showSync = true" title="Sincronizar con Google Drive">☁️</button>
+        <button class="sync-btn" @click="showSync = true" title="Tu cuenta (Google)">👤</button>
         <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
         <span class="who">@{{ connection.nickname }}</span>
         <code class="tok" v-if="connection.token">{{ connection.token }}</code>
