@@ -10,6 +10,28 @@ import App from './App.vue'
 const embed = new URLSearchParams(location.search).get('embed')
 if (embed) document.documentElement.classList.add('cc-embed')
 
+// Diagnóstico: imprime contexto al arrancar. Útil para entender si estamos
+// en secure context, qué origen tenemos, quién es el top-level, etc.
+try {
+  let topOrigin = null
+  let topAccessible = false
+  try { topOrigin = window.top.location.origin; topAccessible = true }
+  catch (_) { topOrigin = '(cross-origin, blocked)' }
+  console.log('[cc-messenger] context', {
+    origin: location.origin,
+    href: location.href,
+    embed: embed || null,
+    isSecureContext: window.isSecureContext,
+    inIframe: window !== window.top,
+    topOrigin,
+    topAccessible,
+    parentOrigin: window.parent !== window ? '(cross-origin)' : location.origin,
+    cryptoRandomUUID: typeof crypto?.randomUUID === 'function',
+    cryptoSubtle: !!crypto?.subtle,
+    userAgent: navigator.userAgent
+  })
+} catch (e) { console.warn('[cc-messenger] context log failed', e) }
+
 // Polyfill de crypto.randomUUID: requiere "secure context", que NO se cumple
 // cuando esta PWA va en un iframe dentro de una página padre HTTP (overlay
 // de la extensión sobre sitios http://). En ese caso `crypto.randomUUID` es
