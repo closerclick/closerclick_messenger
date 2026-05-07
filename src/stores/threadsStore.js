@@ -421,7 +421,22 @@ export const useThreadsStore = defineStore('threads', () => {
   }
 
   // Carga asíncrona — el UI verá hilos aparecer cuando el store responda.
-  load().catch(e => console.warn('threads.load failed:', e))
+  // Además, nos suscribimos a `onSync`: el store puede arrancar bloqueado
+  // (sin passphrase) y los hilos cifrados solo aparecen tras unlock + sync.
+  // Sin esto, al refrescar la página los mensajes no se ven porque `load`
+  // corre antes de que el vault esté desbloqueado.
+  const reload = () => load().catch(e => console.warn('threads.load failed:', e))
+  reload()
+  ;(async () => {
+    const store = await getStore()
+    if (!store?.onSync) return
+    store.onSync((ev) => {
+      const t = ev?.type || ev
+      if (t === 'unlock' || t === 'sync' || t === 'connect' || t === 'remote-update') {
+        reload()
+      }
+    })
+  })()
 
   return {
     threads, activePubkey, activeThread, activeContact, outbox,
