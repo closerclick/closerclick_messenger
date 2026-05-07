@@ -10,6 +10,22 @@ import App from './App.vue'
 const embed = new URLSearchParams(location.search).get('embed')
 if (embed) document.documentElement.classList.add('cc-embed')
 
+// Polyfill de crypto.randomUUID: requiere "secure context", que NO se cumple
+// cuando esta PWA va en un iframe dentro de una página padre HTTP (overlay
+// de la extensión sobre sitios http://). En ese caso `crypto.randomUUID` es
+// undefined y libs como `closer-click-store` (sync.js getDeviceId) revientan.
+// Lo emulamos con `crypto.getRandomValues`, que sí está disponible siempre.
+if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {
+  crypto.randomUUID = function () {
+    const b = new Uint8Array(16)
+    crypto.getRandomValues(b)
+    b[6] = (b[6] & 0x0f) | 0x40
+    b[8] = (b[8] & 0x3f) | 0x80
+    const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('')
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`
+  }
+}
+
 const app = createApp(App)
 app.use(createPinia())
 app.mount('#app')
