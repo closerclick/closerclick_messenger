@@ -23,6 +23,12 @@ export const useConnectionStore = defineStore('connection', () => {
   const setNickname = (name) => {
     nickname.value = sanitizeNickname((name || '').trim())
     localStorage.setItem('messenger_nickname', nickname.value)
+    // También guardarlo en la vault, así viaja con `id.exportIdentity()` y
+    // los overlays particionados pueden recuperarlo del bridge sin depender
+    // del localStorage local de messenger (que está partitioned).
+    if (nickname.value) {
+      getIdentity().then(id => id?.setMyNickname?.(nickname.value)).catch(() => {})
+    }
   }
 
   const myPublickey = ref(null)

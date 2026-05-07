@@ -90,9 +90,16 @@ onMounted(async () => {
   if (!blockedByInsecureTop) {
     try {
       const id = await getIdentity()
-      if (id && !connection.nicknameSet) {
-        const nick = id.me?.nickname
-        if (nick) connection.setNickname(nick)
+      if (id) {
+        const vaultNick = id.me?.nickname
+        if (vaultNick && !connection.nicknameSet) {
+          connection.setNickname(vaultNick)
+        } else if (!vaultNick && connection.nicknameSet) {
+          // Backfill legacy: usuarios viejos guardaron nick solo en
+          // localStorage('messenger_nickname'). Lo subimos a la vault para
+          // que viaje con el blob a otros contextos.
+          await id.setMyNickname(connection.nickname).catch(() => {})
+        }
       }
     } catch (_) {}
   }
