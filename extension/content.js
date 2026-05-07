@@ -10,14 +10,7 @@
   if (location.protocol === 'chrome-extension:' || location.protocol === 'chrome:') return
   if (location.host === 'messenger.closer.click') return  // no auto-inyectar dentro del propio PWA
 
-  // Cargamos el wrapper de la extensión en lugar del PWA directo. El wrapper
-  // (overlay.html, página de chrome-extension://) embebe messenger.closer.click
-  // adentro: como es página de la extensión y tenemos host_permissions, ese
-  // iframe interno obtiene acceso unpartitioned al storage de messenger,
-  // compartiendo identidad y datos con las pestañas normales del navegador.
-  // Sin esto, un iframe directo desde un content script queda partitioned
-  // bajo el origen de la página visitada.
-  const PWA_URL = chrome.runtime.getURL('overlay.html')
+  const PWA_URL = 'https://messenger.closer.click/?embed=overlay'
 
   const host = document.createElement('div')
   host.id = 'cc-messenger-host'
