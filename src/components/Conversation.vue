@@ -78,7 +78,7 @@ const grouped = computed(() => {
   <div class="conv" v-if="c">
     <header class="head">
       <button class="back" @click="emit('back')" title="Volver">←</button>
-      <div class="avatar-wrap">
+      <div class="avatar-wrap" @click="emit('rate', c.publickey)" title="Calificar">
         <div class="avatar" :style="{ background: avatarBg(c.publickey) }">
           {{ initials(c.nickname) }}
         </div>
@@ -165,7 +165,8 @@ const grouped = computed(() => {
 .back:hover { background: var(--bg-3); }
 @media (min-width: 701px) { .back { display: none; } }
 
-.avatar-wrap { position: relative; flex-shrink: 0; }
+.avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
+.avatar-wrap:hover .avatar { filter: brightness(1.1); }
 .avatar {
   width: 38px; height: 38px;
   border-radius: 50%;
@@ -295,8 +296,20 @@ const grouped = computed(() => {
 .composer {
   display: flex; gap: 10px; align-items: flex-end;
   padding: 14px 20px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   background: var(--bg-2);
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .composer { padding: 12px 14px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .composer textarea {
+    min-height: 48px;
+    padding: 13px 18px;
+    font-size: 16px; /* evita zoom en iOS al enfocar */
+  }
+  .clip { width: 44px; height: 44px; font-size: 22px; }
+  .send { width: 48px; height: 48px; font-size: 16px; }
 }
 .clip {
   background: transparent;

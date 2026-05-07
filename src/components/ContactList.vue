@@ -78,7 +78,7 @@ const fmtTime = (ts) => {
       :class="{ active: threads.activePubkey === c.publickey }"
       @click="emit('select', c.publickey)"
     >
-      <div class="avatar-wrap">
+      <div class="avatar-wrap" @click.stop="emit('rate', c.publickey)" title="Calificar">
         <div class="avatar" :style="{ background: avatarBg(c.publickey) }">
           {{ initials(c.nickname) }}
         </div>
@@ -135,7 +135,9 @@ const fmtTime = (ts) => {
 .avatar-wrap {
   position: relative;
   flex-shrink: 0;
+  cursor: pointer;
 }
+.avatar-wrap:hover .avatar { filter: brightness(1.1); }
 .avatar {
   width: 42px; height: 42px;
   border-radius: 50%;

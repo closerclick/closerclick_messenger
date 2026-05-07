@@ -9,6 +9,26 @@ import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
 import SyncSettingsModal from './components/SyncSettingsModal.vue'
+import HelpTip from './components/HelpTip.vue'
+
+const HELP_TIPS = [
+  {
+    id: 'token-share',
+    targetSelector: '.me .tok',
+    message: 'Este token es necesario para que otros usuarios te puedan agregar como contacto.',
+    placement: 'bottom',
+    when: () => !!document.querySelector('.me .tok')
+  }
+]
+const HELP_KEY = 'cc_help_seen_v1'
+const seenHelp = ref(new Set(JSON.parse(localStorage.getItem(HELP_KEY) || '[]')))
+const currentTip = computed(() => HELP_TIPS.find(t => !seenHelp.value.has(t.id) && (t.when ? t.when() : true)) || null)
+const dismissTip = () => {
+  if (!currentTip.value) return
+  seenHelp.value.add(currentTip.value.id)
+  localStorage.setItem(HELP_KEY, JSON.stringify([...seenHelp.value]))
+  seenHelp.value = new Set(seenHelp.value)
+}
 
 const connection = useConnectionStore()
 const contacts = useContactsStore()
@@ -99,7 +119,7 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
   <div v-else class="app">
     <header class="topbar">
       <div class="brand">
-        <span class="logo">CC</span>
+        <img class="logo" src="/icons/icon-192.png" alt="Closer Click" />
         <span class="brand-name">Closer Click</span>
       </div>
       <div class="status">
@@ -144,11 +164,25 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
     <SyncSettingsModal v-if="showSync" @close="showSync = false" />
+
+    <HelpTip
+      v-if="currentTip && connection.token"
+      :key="currentTip.id"
+      :target-selector="currentTip.targetSelector"
+      :message="currentTip.message"
+      :placement="currentTip.placement"
+      @dismiss="dismissTip"
+    />
   </div>
 </template>
 
 <style scoped>
-.app { display: flex; flex-direction: column; height: 100vh; }
+.app {
+  display: flex; flex-direction: column;
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+}
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
@@ -159,14 +193,9 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
 }
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo {
-  display: inline-flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
-  background: var(--accent); color: var(--on-accent);
-  border-radius: 10px;
-  font-family: var(--font-headline);
-  font-weight: 700; font-size: 14px;
-  letter-spacing: -0.02em;
-  box-shadow: 0 1px 2px rgba(192, 57, 43, 0.25);
+  object-fit: contain;
+  display: block;
 }
 .brand-name {
   font-family: var(--font-headline);

@@ -136,7 +136,12 @@ export const useThreadsStore = defineStore('threads', () => {
         trimmed
       )
       const msg = formatMessage('DM_ENC', { envelope, ts: entry.ts, mid: entry.id })
-      await connection.sendByPubkey([pubkey], msg)
+      // Si conocemos un token actual del peer, mandamos por token: el proxy
+      // client intenta WebRTC primero y cae a proxy si no hay DataChannel.
+      // Si no hay token (peer offline), usamos pubkey para encolar 24h.
+      const token = contacts.tokenFor(pubkey)
+      if (token) await connection.sendMessage([token], msg)
+      else       await connection.sendByPubkey([pubkey], msg)
       await updateEntry(pubkey, entry.id, { pending: false })
     } catch (e) {
       console.warn('sendDM failed; will retry:', e)
@@ -158,7 +163,9 @@ export const useThreadsStore = defineStore('threads', () => {
           item.text
         )
         const msg = formatMessage('DM_ENC', { envelope, ts: Date.now(), mid: item.entryId })
-        await connection.sendByPubkey([item.pubkey], msg)
+        const token = contacts.tokenFor(item.pubkey)
+        if (token) await connection.sendMessage([token], msg)
+        else       await connection.sendByPubkey([item.pubkey], msg)
         await updateEntry(item.pubkey, item.entryId, { pending: false })
       } catch (err) {
         console.warn('flush failed:', err)
