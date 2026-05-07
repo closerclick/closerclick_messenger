@@ -20,13 +20,14 @@ export const useConnectionStore = defineStore('connection', () => {
 
   let handlersSetup = false
 
-  const setNickname = (name) => {
+  const setNickname = (name, opts = {}) => {
     nickname.value = sanitizeNickname((name || '').trim())
     localStorage.setItem('messenger_nickname', nickname.value)
     // También guardarlo en la vault, así viaja con `id.exportIdentity()` y
-    // los overlays particionados pueden recuperarlo del bridge sin depender
-    // del localStorage local de messenger (que está partitioned).
-    if (nickname.value) {
+    // los overlays particionados pueden recuperarlo del bridge. Si el caller
+    // pasa `{ writeToVault: false }` (p.ej. el placeholder derivado del
+    // pubkey en overlay) saltamos esto para no contaminar el vault.
+    if (nickname.value && opts.writeToVault !== false) {
       getIdentity().then(id => id?.setMyNickname?.(nickname.value)).catch(() => {})
     }
   }

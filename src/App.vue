@@ -93,12 +93,26 @@ onMounted(async () => {
       console.log('[cc-app] boot id.me=', id?.me, 'connection.nickname=', connection.nickname)
       if (id) {
         const vaultNick = id.me?.nickname
+        const havePubkey = !!id.me?.publickey
         if (vaultNick && !connection.nicknameSet) {
           console.log('[cc-app] boot: applying nickname from vault →', vaultNick)
           connection.setNickname(vaultNick)
         } else if (!vaultNick && connection.nicknameSet) {
           console.log('[cc-app] boot: backfilling vault.me.nickname from localStorage →', connection.nickname)
           await id.setMyNickname(connection.nickname).catch(e => console.warn('backfill failed', e))
+        } else if (!vaultNick && !connection.nicknameSet && havePubkey && isReadOnlyEmbed) {
+          // Overlay con vault hidratado pero sin nickname — el blob fue
+          // publicado por una versión vieja que no sincronizaba el nickname.
+          // Aceptamos un placeholder derivado del pubkey para desbloquear la
+          // UI; el usuario puede actualizar su nick en messenger.closer.click
+          // directo y se propagará al overlay.
+          let derived = 'Yo'
+          try {
+            const pk = JSON.parse(id.me.publickey)
+            derived = (pk?.x || '').slice(0, 6).toUpperCase() || 'Yo'
+          } catch (_) {}
+          console.log('[cc-app] boot: overlay placeholder nickname →', derived)
+          connection.setNickname(derived, { writeToVault: false })
         }
       }
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
