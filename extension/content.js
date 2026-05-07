@@ -17,6 +17,13 @@
   window.__cc_messenger_injected = true
   if (location.protocol === 'chrome-extension:' || location.protocol === 'chrome:') return
   if (location.host === 'messenger.closer.click') return
+  // Páginas HTTP rompen el secure context dentro del iframe → la vault no
+  // arranca (crypto.subtle no existe) y la app sería inutilizable. Mejor no
+  // inyectar nada que un FAB que solo lleva a una CTA.
+  if (location.protocol !== 'https:') {
+    console.log('[cc-overlay] skipping injection on non-HTTPS page (insecure iframe context)')
+    return
+  }
 
   const PWA_URL = 'https://messenger.closer.click/?embed=overlay'
   const READY_TIMEOUT_MS = 6000

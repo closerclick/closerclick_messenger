@@ -85,13 +85,17 @@ onMounted(async () => {
   // bridge intente hidratar el vault desde chrome.storage.local antes de
   // decidir si mostramos NicknameModal o CTA. Si la vault tiene me.nickname
   // (después de importar el blob), tomamos ese nick automáticamente.
-  try {
-    const id = await getIdentity()
-    if (id && !connection.nicknameSet) {
-      const nick = id.me?.nickname
-      if (nick) connection.setNickname(nick)
-    }
-  } catch (_) {}
+  // Si estamos en overlay sobre página HTTP, ni siquiera tratamos de cargar
+  // la vault: crypto.subtle no existe → falla seguro.
+  if (!blockedByInsecureTop) {
+    try {
+      const id = await getIdentity()
+      if (id && !connection.nicknameSet) {
+        const nick = id.me?.nickname
+        if (nick) connection.setNickname(nick)
+      }
+    } catch (_) {}
+  }
   booting.value = false
   if (connection.nicknameSet) {
     await connection.connect()
@@ -138,6 +142,10 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
 // (top-level real, unpartitioned) y la extensión propaga el blob al overlay.
 const embed = new URLSearchParams(location.search).get('embed')
 const isReadOnlyEmbed = embed === 'overlay'
+// Si la página padre es HTTP, el iframe HTTPS queda non-secure-context y
+// `crypto.subtle` no existe — la vault no puede arrancar, así que ni siquiera
+// intentamos. CTA inmediato.
+const blockedByInsecureTop = isReadOnlyEmbed && !window.isSecureContext
 const openMessengerTab = () => {
   try { window.open('https://messenger.closer.click/', '_blank', 'noopener') }
   catch (_) { location.href = 'https://messenger.closer.click/' }
@@ -154,7 +162,12 @@ const openMessengerTab = () => {
     <div class="login-card">
       <img class="login-logo" src="/icons/icon-192.png" alt="Closer Click" />
       <h2>Inicia sesión</h2>
-      <p>Crea o entra a tu cuenta en messenger.closer.click. Tu identidad se sincroniza con la extensión automáticamente.</p>
+      <p v-if="blockedByInsecureTop">
+        Esta página usa HTTP. El navegador desactiva las APIs criptográficas en iframes embebidos en sitios no seguros, así que el messenger no puede correr aquí. Ábrelo en su pestaña directa.
+      </p>
+      <p v-else>
+        Crea o entra a tu cuenta en messenger.closer.click. Tu identidad se sincroniza con la extensión automáticamente.
+      </p>
       <button class="btn primary-cta" @click="openMessengerTab">Login</button>
     </div>
   </div>
