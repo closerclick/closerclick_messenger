@@ -53,3 +53,14 @@ app.use(createPinia())
 app.mount('#app')
 
 registerSW({ immediate: true })
+
+// Handshake con el embedder: cuando esta PWA se carga como iframe (popup,
+// overlay, offscreen), avisamos al parent que arrancamos. El content script
+// del overlay usa esto para distinguir "cargado correctamente" de "bloqueado
+// por CSP" (en el segundo caso ningún script corre y el postMessage nunca
+// llega → timeout en el padre).
+if (embed && window !== window.top) {
+  try {
+    window.parent.postMessage({ source: 'cc-messenger', type: 'ready', embed }, '*')
+  } catch (_) {}
+}
