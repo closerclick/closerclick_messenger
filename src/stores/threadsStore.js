@@ -8,6 +8,18 @@ import { sanitizeMessage } from '../utils/sanitize'
 
 const MAX_THREAD = 1000   // cap per-thread history (server-side cap también)
 const LEGACY_KEY = 'messenger_threads_v1'  // migración del antiguo localStorage
+const LOCAL_CACHE_KEY = 'messenger_threads_cache_v1'  // espejo local resiliente
+
+const loadLocalCache = () => {
+  try {
+    const raw = localStorage.getItem(LOCAL_CACHE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+const saveLocalCache = (data) => {
+  try { localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(data)) }
+  catch (e) { console.warn('local thread cache write failed:', e) }
+}
 
 /**
  * Thread entry shape: { id, dir: 'in'|'out', text, ts, pending?: boolean }
@@ -26,7 +38,7 @@ export const useThreadsStore = defineStore('threads', () => {
   const connection = useConnectionStore()
   const contacts = useContactsStore()
 
-  const threads = ref({})       // pubkey -> array of entries
+  const threads = ref(loadLocalCache())   // hidratación inmediata desde cache local
   const activePubkey = ref(null)
   const outbox = ref([])        // messages waiting for recipient to come online
 
@@ -37,7 +49,10 @@ export const useThreadsStore = defineStore('threads', () => {
   // localStorage legacy del messenger viejo, lo migramos una vez.
   const load = async () => {
     const store = await getStore()
-    if (!store) { threads.value = {}; return }
+    // Si el store remoto no está disponible, NO borramos lo que ya tenemos
+    // en memoria (hidratado desde el cache local). Mejor mostrar histórico
+    // potencialmente desactualizado que pantalla en blanco.
+    if (!store) return
     // Migración one-time desde el localStorage del messenger antiguo
     try {
       const legacy = localStorage.getItem(LEGACY_KEY)
@@ -59,7 +74,14 @@ export const useThreadsStore = defineStore('threads', () => {
     for (const k of Object.keys(summaries)) {
       next[k] = await store.listThread(k)
     }
+    // Si el remoto está vacío pero teníamos algo en cache local, conservamos
+    // el cache para no perderlo (puede ser que el vault esté bloqueado).
+    if (Object.keys(next).length === 0 && Object.keys(threads.value).length > 0) {
+      console.warn('[threads] remote store returned empty; keeping local cache')
+      return
+    }
     threads.value = next
+    saveLocalCache(threads.value)
   }
 
   // Apend optimista en memoria + escritura asíncrona al store remoto.
@@ -72,6 +94,7 @@ export const useThreadsStore = defineStore('threads', () => {
     if (threads.value[pubkey].length > MAX_THREAD) {
       threads.value[pubkey] = threads.value[pubkey].slice(-MAX_THREAD)
     }
+    saveLocalCache(threads.value)
     const store = await getStore()
     if (store) {
       try { await store.appendMessage(pubkey, entry) }
@@ -87,6 +110,7 @@ export const useThreadsStore = defineStore('threads', () => {
     const e = arr.find(x => x.id === entryId)
     if (!e) return
     Object.assign(e, patch)
+    saveLocalCache(threads.value)
     const store = await getStore()
     if (store) { try { await store.appendMessage(pubkey, e) } catch (_) {} }
   }

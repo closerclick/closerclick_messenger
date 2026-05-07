@@ -13,7 +13,7 @@ Ambos comparten **identidad** (`id.closer.click`) y **histórico de mensajes** (
 - **Mensajes E2E** cifrados con ECDH P-256 + AES-256-GCM (vía `Identity.encrypt/decrypt`).
 - **Transporte WebRTC-first** con fallback al proxy (`@gatoseya/closer-click-proxy-client` ≥ 0.4): los DMs viajan por `RTCDataChannel` entre peers cuando ambos están online (señalización por el propio proxy, STUN-only). Si el DataChannel aún no abrió o el peer está offline, cae automáticamente al proxy WS (con cola de 24h cuando el destinatario no está conectado). El switch token-vs-pubkey en `sendDM` decide la ruta: token conocido → `send([token])` (WebRTC eligible), sin token → `sendByPubkey([pubkey])` (cola offline).
 - **Contactos compartidos** en el vault.
-- **Histórico compartido** en `store.closer.click` — visible desde web + extensión + futuras apps en el mismo navegador.
+- **Histórico compartido** en `store.closer.click` — visible desde web + extensión + futuras apps en el mismo navegador. Con **cache local resiliente** (`localStorage.messenger_threads_cache_v1`): los hilos se hidratan al instante en cada refresh y los mensajes recibidos durante un bache del store remoto (cert caído, vault bloqueado, timeout) sobreviven al reload.
 - **Cola offline 24h** del proxy, multi-instancia con fan-out (web + extensión reciben el mismo DM).
 - **PWA**: instalable en móvil; sin cache.
 - **Ranking integrado**: rating propio (★ oro) y derivado por endorsements firmados (★ azul).
