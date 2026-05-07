@@ -94,10 +94,13 @@ onMounted(async () => {
       if (id) {
         const vaultNick = id.me?.nickname
         const havePubkey = !!id.me?.publickey
-        if (vaultNick && !connection.nicknameSet) {
+        if (vaultNick && vaultNick !== connection.nickname) {
+          // El vault es la fuente de verdad: si trae nickname y difiere del
+          // local (incluido un placeholder pegado de sesiones previas), lo
+          // aplicamos. En overlay no escribe al vault para no contaminar.
           console.log('[cc-app] boot: applying nickname from vault →', vaultNick)
-          connection.setNickname(vaultNick)
-        } else if (!vaultNick && connection.nicknameSet) {
+          connection.setNickname(vaultNick, { writeToVault: !isReadOnlyEmbed })
+        } else if (!vaultNick && connection.nicknameSet && !isReadOnlyEmbed) {
           console.log('[cc-app] boot: backfilling vault.me.nickname from localStorage →', connection.nickname)
           await id.setMyNickname(connection.nickname).catch(e => console.warn('backfill failed', e))
         } else if (!vaultNick && !connection.nicknameSet && havePubkey && isReadOnlyEmbed) {

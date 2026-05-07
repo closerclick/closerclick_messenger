@@ -65,16 +65,21 @@
     }
   })
 
-  // Notifica cambios de storage a todos los iframes del messenger del host.
+  // Notifica cambios de storage SOLO a iframes del messenger. Antes
+  // broadcasteábamos a `document.querySelectorAll('iframe')`, lo que metía
+  // postMessages en iframes ajenos (p.ej. AWS Console) y rompía sus propios
+  // protocolos de MessageChannel.
   if (chrome?.storage?.onChanged?.addListener) {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes[STORAGE_KEY]) return
       const all = document.querySelectorAll('iframe')
       for (const f of all) {
+        const src = f.src || ''
+        if (!src.startsWith('https://messenger.closer.click/')) continue
         try {
           f.contentWindow?.postMessage(
             { source: 'cc-id-bridge', type: 'changed', blob: changes[STORAGE_KEY].newValue || null },
-            '*'
+            'https://messenger.closer.click'
           )
         } catch (_) {}
       }
