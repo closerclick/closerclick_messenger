@@ -34,7 +34,11 @@ function ensureWired () {
 
 function call (op, payload = {}) {
   ensureWired()
-  if (window === window.top) return Promise.resolve(null)  // no parent
+  // Si estamos en pestaña directa (window === window.top) no hay parent, pero
+  // el content script de la extensión inyecta `identity-bridge-host.js`
+  // también en messenger.closer.click. Esa lista en el mismo `window` (en
+  // su isolated world), así que basta con `window.postMessage` a sí mismo.
+  const target = window.parent !== window ? window.parent : window
   return new Promise((resolve, reject) => {
     const id = _nextId++
     const timer = setTimeout(() => {
@@ -45,7 +49,7 @@ function call (op, payload = {}) {
     _pending.set(id, { resolve, reject, timer })
     try {
       console.log('[cc-id-bridge:client] →', { id, op, hasBlob: !!payload.blob })
-      window.parent.postMessage({ source: 'cc-id-bridge', type: 'request', id, op, ...payload }, '*')
+      target.postMessage({ source: 'cc-id-bridge', type: 'request', id, op, ...payload }, '*')
     } catch (e) {
       _pending.delete(id)
       clearTimeout(timer)

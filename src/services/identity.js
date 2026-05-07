@@ -40,7 +40,6 @@ async function bridgeImportIfAvailable (id) {
 // bridge para que otros contextos (el offscreen, popups, overlays en otras
 // pestañas) puedan converger.
 async function bridgePush (id) {
-  if (window === window.top) return
   try {
     const blob = await id.exportIdentity()
     if (blob) await setIdentityBlob(blob)
@@ -64,7 +63,6 @@ function isWriteAuthorisedEmbed () {
 // añadirlos aquí.
 function attachAutoPush (id) {
   if (!isWriteAuthorisedEmbed()) return
-  if (window === window.top) return  // pestaña normal: no hay parent al que empujar
   const MUTATORS = [
     'addContact', 'updateContact', 'removeContact',
     'setMyNickname', 'setRating', 'forgetPeer',
@@ -107,13 +105,12 @@ export async function getIdentity () {
       await bridgeImportIfAvailable(inst)
       attachAutoPush(inst)
       attachExternalSync(inst)
-      // En modos con write authority (popup/offscreen, que viven en
-      // chrome-extension:// y por host_permissions tienen acceso unpartitioned
-      // a id.closer.click), publicamos el blob actual al bridge inmediatamente
-      // — sin esperar a una mutación. Así los overlays particionados pueden
-      // hidratarse al instante con la identidad real, aunque el usuario no
-      // haya tocado nada en esta sesión.
-      if (isWriteAuthorisedEmbed() && window !== window.top) {
+      // Cualquier contexto con write authority publica su blob al bridge
+      // inmediatamente: pestaña directa de messenger.closer.click, popup
+      // pineado y offscreen. La extensión inyecta `identity-bridge-host.js`
+      // también en messenger.closer.click, así que la pestaña directa puede
+      // hablar con chrome.storage.local vía window.postMessage a sí misma.
+      if (isWriteAuthorisedEmbed()) {
         bridgePush(inst).catch(() => {})
       }
       _instance = inst

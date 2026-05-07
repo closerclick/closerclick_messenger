@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Closer Click Messenger",
   "short_name": "CC Messenger",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "End-to-end encrypted P2P messaging overlay on any page. Shares identity, contacts and threads with the Closer Click ecosystem.",
   "homepage_url": "https://github.com/seyacat/closerclick_messenger",
   "author": "seyacat",
@@ -39,6 +39,12 @@
       "js": ["identity-bridge-host.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": ["https://messenger.closer.click/*"],
+      "js": ["identity-bridge-host.js"],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "permissions": [
