@@ -90,9 +90,12 @@ onUnmounted(() => {
   window.removeEventListener('appinstalled', onAppInstalled)
 })
 
+// Avisamos a todos los contactos por pubkey: si están conectados el proxy
+// les entrega ya, si no queda en cola 24h. Su HELLO de respuesta marcará
+// presencia (markOnline) y la UI deja de decir "offline".
 const announceToKnown = async () => {
   for (const c of contacts.contacts) {
-    if (c.lastToken) threads.sendHello(c.lastToken)
+    threads.sendHelloByPubkey(c.publickey)
   }
 }
 

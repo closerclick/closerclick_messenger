@@ -214,32 +214,53 @@ export const useThreadsStore = defineStore('threads', () => {
   const tryHandshake = async (pubkey) => {
     const c = contacts.findByPubkey(pubkey)
     if (!c) return
-    const token = contacts.tokenFor(pubkey)
-    if (!token) return
-    try {
-      const id = await getIdentity()
-      if (!id) return
-      const { nonce } = await id.makeChallenge()
-      const msg = formatMessage('IDENTIFY_CHALLENGE', { nonce })
-      await connection.sendMessage([token], msg)
-    } catch (e) { console.warn('tryHandshake:', e) }
+    const token = contacts.liveTokenFor(pubkey)
+    // Si tenemos presencia confirmada esta sesión, vamos por challenge.
+    // Si no, mandamos un HELLO por pubkey: el proxy lo entregará al peer
+    // (instant si está conectado, queue offline si no). Cuando responda
+    // su HELLO, markOnline lo marcará como en línea en el UI.
+    if (token) {
+      try {
+        const id = await getIdentity()
+        if (!id) return
+        const { nonce } = await id.makeChallenge()
+        const msg = formatMessage('IDENTIFY_CHALLENGE', { nonce })
+        await connection.sendMessage([token], msg)
+      } catch (e) { console.warn('tryHandshake:', e) }
+    } else {
+      await sendHelloByPubkey(pubkey)
+    }
+  }
+
+  const buildHello = async () => {
+    const id = await getIdentity()
+    if (!id) return null
+    const pubkey = id.me?.publickey
+    if (!pubkey) return null
+    const encryptionPubkey = await id.getEncryptionPubkey()
+    return formatMessage('HELLO', {
+      nickname: connection.nickname,
+      pubkey, encryptionPubkey
+    })
   }
 
   const sendHello = async (token) => {
     try {
-      const id = await getIdentity()
-      if (!id) return
-      // La signing pubkey vive en `id.me` (entregada en el evento `ready`),
-      // no hay método getPublicKey(). La encryption pubkey sí es RPC.
-      const pubkey = id.me?.publickey
-      if (!pubkey) return
-      const encryptionPubkey = await id.getEncryptionPubkey()
-      const msg = formatMessage('HELLO', {
-        nickname: connection.nickname,
-        pubkey, encryptionPubkey
-      })
+      const msg = await buildHello()
+      if (!msg) return
       await connection.sendMessage([token], msg)
     } catch (e) { console.warn('sendHello:', e) }
+  }
+
+  // Pinga por pubkey: usado cuando no tenemos token vivo del peer pero
+  // queremos saber su presencia. El proxy ruta al token actual (si está
+  // identificado) o encola hasta 24h.
+  const sendHelloByPubkey = async (pubkey) => {
+    try {
+      const msg = await buildHello()
+      if (!msg) return
+      await connection.sendByPubkey([pubkey], msg)
+    } catch (e) { console.warn('sendHelloByPubkey:', e) }
   }
 
   // ------------------------------------------------------------------------
@@ -472,7 +493,7 @@ export const useThreadsStore = defineStore('threads', () => {
   return {
     threads, activePubkey, activeThread, activeContact, outbox,
     setActive, sendDM, flushOutbox,
-    handleIncoming, sendHello, tryHandshake,
+    handleIncoming, sendHello, sendHelloByPubkey, tryHandshake,
     askRatingsAbout, load
   }
 })
