@@ -92,6 +92,10 @@ export const useContactsStore = defineStore('contacts', () => {
     onlineMap.value = new Map(onlineMap.value)
   }
   const isOnline = (pubkey) => onlineMap.value.has(pubkey)
+  // Token "fresco": solo de la sesión actual (presencia confirmada).
+  // Útil para enrutar por token (WebRTC/proxy directo). Si no hay, hay que
+  // ir por pubkey para aprovechar la cola offline del proxy.
+  const liveTokenFor = (pubkey) => onlineMap.value.get(pubkey) || null
   const tokenFor = (pubkey) => onlineMap.value.get(pubkey) || findByPubkey(pubkey)?.lastToken || null
 
   // ---- Rating -------------------------------------------------------------
@@ -114,7 +118,7 @@ export const useContactsStore = defineStore('contacts', () => {
     refresh, refreshPeers,
     addContact, updateContact, removeContact,
     findByPubkey, findByToken, peerFor,
-    markOnline, markOffline, isOnline, tokenFor,
+    markOnline, markOffline, isOnline, tokenFor, liveTokenFor,
     ratePeer, ratingFor, myRatingFor
   }
 })

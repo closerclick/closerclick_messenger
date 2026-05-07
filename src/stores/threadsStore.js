@@ -160,10 +160,11 @@ export const useThreadsStore = defineStore('threads', () => {
         trimmed
       )
       const msg = formatMessage('DM_ENC', { envelope, ts: entry.ts, mid: entry.id })
-      // Si conocemos un token actual del peer, mandamos por token: el proxy
-      // client intenta WebRTC primero y cae a proxy si no hay DataChannel.
-      // Si no hay token (peer offline), usamos pubkey para encolar 24h.
-      const token = contacts.tokenFor(pubkey)
+      // Solo rutamos por token si tenemos presencia CONFIRMADA en esta sesión
+      // (`liveTokenFor`). El `lastToken` persistido en vault puede ser de una
+      // sesión anterior y el proxy lo descartaría sin caer a cola offline,
+      // así que para esos casos usamos pubkey (cola offline 24h del proxy).
+      const token = contacts.liveTokenFor(pubkey)
       if (token) await connection.sendMessage([token], msg)
       else       await connection.sendByPubkey([pubkey], msg)
       await updateEntry(pubkey, entry.id, { pending: false })
@@ -187,7 +188,7 @@ export const useThreadsStore = defineStore('threads', () => {
           item.text
         )
         const msg = formatMessage('DM_ENC', { envelope, ts: Date.now(), mid: item.entryId })
-        const token = contacts.tokenFor(item.pubkey)
+        const token = contacts.liveTokenFor(item.pubkey)
         if (token) await connection.sendMessage([token], msg)
         else       await connection.sendByPubkey([item.pubkey], msg)
         await updateEntry(item.pubkey, item.entryId, { pending: false })
