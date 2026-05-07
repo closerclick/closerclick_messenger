@@ -116,10 +116,32 @@ const openRating = (pubkey) => { ratingFor.value = pubkey }
 
 // avatar initials helper
 const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase()
+
+// Modo overlay: storage particionado, no podemos crear identidad útil aquí.
+// Si no llega blob por el bridge, mostramos un CTA al messenger directo en vez
+// del NicknameModal. El usuario crea/usa su cuenta en messenger.closer.click
+// (top-level real, unpartitioned) y la extensión propaga el blob al overlay.
+const embed = new URLSearchParams(location.search).get('embed')
+const isReadOnlyEmbed = embed === 'overlay'
+const openMessengerTab = () => {
+  try { window.open('https://messenger.closer.click/', '_blank', 'noopener') }
+  catch (_) { location.href = 'https://messenger.closer.click/' }
+}
 </script>
 
 <template>
-  <NicknameModal v-if="!connection.nicknameSet" @set="handleNicknameSet" />
+  <!-- Overlay sin identidad: no permitimos crear cuenta aquí (storage
+       particionado por el site visitado). En su lugar, CTA al messenger real. -->
+  <div v-if="!connection.nicknameSet && isReadOnlyEmbed" class="login-cta">
+    <div class="login-card">
+      <img class="login-logo" src="/icons/icon-192.png" alt="Closer Click" />
+      <h2>Inicia sesión</h2>
+      <p>Crea o entra a tu cuenta en messenger.closer.click. Tu identidad se sincroniza con la extensión automáticamente.</p>
+      <button class="btn primary-cta" @click="openMessengerTab">Login</button>
+    </div>
+  </div>
+
+  <NicknameModal v-else-if="!connection.nicknameSet" @set="handleNicknameSet" />
 
   <div v-else class="app">
     <header class="topbar">
@@ -190,6 +212,25 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
   min-height: 0;
   overflow: hidden;
 }
+
+.login-cta {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%;
+  padding: 24px;
+  background: var(--bg-1);
+}
+.login-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  max-width: 340px;
+}
+.login-logo { width: 56px; height: 56px; margin-bottom: 14px; }
+.login-card h2 { margin: 0 0 8px; font-family: var(--font-headline); font-size: 20px; }
+.login-card p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.login-card .btn { width: 100%; }
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
