@@ -39,7 +39,8 @@ export const useThreadsStore = defineStore('threads', () => {
   const contacts = useContactsStore()
 
   const threads = ref(loadLocalCache())   // hidratación inmediata desde cache local
-  const activePubkey = ref(null)
+  const ACTIVE_KEY = 'messenger_active_pubkey_v1'
+  const activePubkey = ref(localStorage.getItem(ACTIVE_KEY) || null)
   const outbox = ref([])        // messages waiting for recipient to come online
 
   const activeThread = computed(() => activePubkey.value ? (threads.value[activePubkey.value] || []) : [])
@@ -117,7 +118,12 @@ export const useThreadsStore = defineStore('threads', () => {
 
   const setActive = (pubkey) => {
     activePubkey.value = pubkey
-    if (pubkey) tryHandshake(pubkey)
+    if (pubkey) {
+      localStorage.setItem(ACTIVE_KEY, pubkey)
+      tryHandshake(pubkey)
+    } else {
+      localStorage.removeItem(ACTIVE_KEY)
+    }
   }
 
   const formatMessage = (type, payload) => `${type}|${JSON.stringify(payload)}`

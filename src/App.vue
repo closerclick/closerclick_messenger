@@ -37,7 +37,9 @@ const threads = useThreadsStore()
 const showAdd = ref(false)
 const showSync = ref(false)
 const ratingFor = ref(null)
-const showSidebarMobile = ref(true)
+// En mobile, si ya hay conversación restaurada del refresh, abrimos directo
+// el panel de chat; si no, mostramos la lista de contactos.
+const showSidebarMobile = ref(!threads.activePubkey)
 
 let deferredPrompt = null
 const isStandalone = ref(
