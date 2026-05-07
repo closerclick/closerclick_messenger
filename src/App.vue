@@ -190,11 +190,6 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
   min-height: 0;
   overflow: hidden;
 }
-/* Cuando estamos dentro de un iframe de la extensión (popup/offscreen),
-   el contenedor debe llenar el iframe, no el viewport: 100% en vez de
-   100dvh evita overflow cuando la ventana mide 540px de alto. */
-:global(html.cc-embed) body, :global(html.cc-embed) #app { height: 100%; min-height: 0; }
-:global(html.cc-embed) .app { height: 100%; }
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
