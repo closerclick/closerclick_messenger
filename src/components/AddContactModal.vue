@@ -78,7 +78,6 @@ const pasteToken = async () => {
                 v-model="tokenInput"
                 placeholder="ej. A4F2"
                 maxlength="8"
-                autofocus
                 class="mono"
                 @keyup.enter="submit"
               />

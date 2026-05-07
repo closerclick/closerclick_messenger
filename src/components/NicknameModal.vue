@@ -1,9 +1,14 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 const emit = defineEmits(['set'])
 const nick = ref('')
+const inputEl = ref(null)
 const valid = (v) => v.trim().length >= 3 && v.trim().length <= 20
 const submit = () => { if (valid(nick.value)) emit('set', nick.value.trim()) }
+// Foco programático en lugar de `autofocus`: Chrome bloquea autofocus en
+// iframes cross-origin (extensión, embed). Esto sí funciona si el iframe
+// tiene el foco, y si no, no rompe nada — solo no enfoca.
+onMounted(() => { try { inputEl.value?.focus() } catch (_) {} })
 </script>
 
 <template>
@@ -22,11 +27,11 @@ const submit = () => { if (valid(nick.value)) emit('set', nick.value.trim()) }
       <label class="field">
         <span class="label">Tu nickname</span>
         <input
+          ref="inputEl"
           v-model="nick"
           @keyup.enter="submit"
           placeholder="ej. alice_2024"
           maxlength="20"
-          autofocus
         />
         <span class="counter">{{ nick.length }} / 20</span>
         <span class="helper">
