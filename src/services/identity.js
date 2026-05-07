@@ -107,6 +107,15 @@ export async function getIdentity () {
       await bridgeImportIfAvailable(inst)
       attachAutoPush(inst)
       attachExternalSync(inst)
+      // En modos con write authority (popup/offscreen, que viven en
+      // chrome-extension:// y por host_permissions tienen acceso unpartitioned
+      // a id.closer.click), publicamos el blob actual al bridge inmediatamente
+      // — sin esperar a una mutación. Así los overlays particionados pueden
+      // hidratarse al instante con la identidad real, aunque el usuario no
+      // haya tocado nada en esta sesión.
+      if (isWriteAuthorisedEmbed() && window !== window.top) {
+        bridgePush(inst).catch(() => {})
+      }
       _instance = inst
       return _instance
     } catch (e) {
