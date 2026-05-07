@@ -9,23 +9,29 @@
 /* ----- floating action button ----- */
 .cc-fab {
   position: fixed;
-  bottom: 20px;
+  bottom: 220px;
   right: 20px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #4f8ef7;
+  background: transparent;
   color: #fff;
   border: 0;
-  font-size: 22px;
+  padding: 0;
   cursor: pointer;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.15s, background 0.15s;
 }
-.cc-fab:hover { background: #2c6ad6; transform: scale(1.05); }
+.cc-fab:hover { transform: scale(1.05); }
+.cc-fab-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  display: block;
+}
 
 /* ----- toasts (mouse pass-through) -----
    El contenedor NO recibe eventos. Solo cada toast en sí. */
@@ -78,7 +84,7 @@
 .cc-panel {
   position: fixed;
   bottom: 80px;
-  right: 20px;
+  right: 80px;
   width: 380px;
   max-width: calc(100vw - 40px);
   height: 540px;
@@ -123,6 +129,6 @@
 
 @media (max-width: 480px) {
   .cc-panel { width: calc(100vw - 16px); right: 8px; bottom: 70px; height: calc(100vh - 90px); }
-  .cc-fab { right: 12px; bottom: 12px; }
+  .cc-fab { right: 12px; bottom: 212px; }
   .cc-toasts { right: 12px; bottom: 70px; }
 }

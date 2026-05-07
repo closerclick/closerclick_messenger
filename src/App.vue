@@ -307,6 +307,7 @@ const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]
   .layout.show-side .main-pane { display: none; }
   .topbar { padding: 10px 14px; }
   .brand-name { display: none; }
-  .me .tok { display: none; }
+  .me { padding: 4px 8px; gap: 6px; font-size: 12px; }
+  .me .tok { font-size: 11px; padding: 2px 6px; }
 }
 </style>

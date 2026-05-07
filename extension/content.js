@@ -59,8 +59,12 @@
   // ----- floating action button -----
   const fab = document.createElement('button')
   fab.className = 'cc-fab'
-  fab.textContent = '💬'
   fab.title = 'Closer Click Messenger'
+  const fabIcon = document.createElement('img')
+  fabIcon.src = chrome.runtime.getURL('icons/icon-192.png')
+  fabIcon.alt = ''
+  fabIcon.className = 'cc-fab-icon'
+  fab.appendChild(fabIcon)
   fab.addEventListener('click', () => togglePanel())
   root.appendChild(fab)
 
