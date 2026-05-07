@@ -39,10 +39,12 @@ function call (op, payload = {}) {
     const id = _nextId++
     const timer = setTimeout(() => {
       _pending.delete(id)
+      console.warn('[cc-id-bridge:client] timeout', { id, op })
       reject(new Error('cc-id-bridge timeout'))
     }, 3000)
     _pending.set(id, { resolve, reject, timer })
     try {
+      console.log('[cc-id-bridge:client] →', { id, op, hasBlob: !!payload.blob })
       window.parent.postMessage({ source: 'cc-id-bridge', type: 'request', id, op, ...payload }, '*')
     } catch (e) {
       _pending.delete(id)

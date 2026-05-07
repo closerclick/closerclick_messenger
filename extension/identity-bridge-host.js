@@ -20,6 +20,12 @@
   window.__cc_identity_bridge_host = true
 
   const STORAGE_KEY = 'cc-identity-blob-v1'
+  const LOG = (...a) => console.log('[cc-id-bridge:host]', ...a)
+  LOG('loaded', {
+    href: location.href,
+    hasChromeStorage: !!chrome?.storage?.local,
+    hasOnChanged: !!chrome?.storage?.onChanged
+  })
 
   function reply (source, origin, id, payload) {
     try { source.postMessage({ source: 'cc-id-bridge', type: 'response', id, ...payload }, origin) }
@@ -30,24 +36,31 @@
     const msg = event.data
     if (!msg || msg.source !== 'cc-id-bridge' || msg.type !== 'request') return
     const { id, op, blob } = msg
+    LOG('request', { id, op, hasBlob: !!blob, fromOrigin: event.origin })
     if (!chrome?.storage?.local) {
+      LOG('chrome.storage unavailable')
       reply(event.source, event.origin, id, { error: 'chrome.storage unavailable' })
       return
     }
     try {
       if (op === 'get') {
         const r = await chrome.storage.local.get(STORAGE_KEY)
-        reply(event.source, event.origin, id, { result: r?.[STORAGE_KEY] || null })
+        const stored = r?.[STORAGE_KEY] || null
+        LOG('get result', stored ? 'blob present' : 'empty')
+        reply(event.source, event.origin, id, { result: stored })
       } else if (op === 'set') {
         await chrome.storage.local.set({ [STORAGE_KEY]: blob })
+        LOG('set ok')
         reply(event.source, event.origin, id, { result: true })
       } else if (op === 'clear') {
         await chrome.storage.local.remove(STORAGE_KEY)
+        LOG('cleared')
         reply(event.source, event.origin, id, { result: true })
       } else {
         reply(event.source, event.origin, id, { error: `unknown op: ${op}` })
       }
     } catch (e) {
+      LOG('error', e)
       reply(event.source, event.origin, id, { error: e?.message || String(e) })
     }
   })

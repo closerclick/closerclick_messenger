@@ -10,6 +10,9 @@ import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
 import SyncSettingsModal from './components/SyncSettingsModal.vue'
 import HelpTip from './components/HelpTip.vue'
+import { getIdentity } from './services/identity'
+
+const booting = ref(true)
 
 const HELP_TIPS = [
   {
@@ -78,6 +81,18 @@ const showInstallButton = computed(() => !isStandalone.value && (canInstall.valu
 onMounted(async () => {
   window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
   window.addEventListener('appinstalled', onAppInstalled)
+  // Bootstrap: fuerza el getIdentity() inicial para que en modo iframe el
+  // bridge intente hidratar el vault desde chrome.storage.local antes de
+  // decidir si mostramos NicknameModal o CTA. Si la vault tiene me.nickname
+  // (después de importar el blob), tomamos ese nick automáticamente.
+  try {
+    const id = await getIdentity()
+    if (id && !connection.nicknameSet) {
+      const nick = id.me?.nickname
+      if (nick) connection.setNickname(nick)
+    }
+  } catch (_) {}
+  booting.value = false
   if (connection.nicknameSet) {
     await connection.connect()
     await contacts.refreshPeers()
@@ -130,9 +145,12 @@ const openMessengerTab = () => {
 </script>
 
 <template>
+  <!-- Boot: esperamos al getIdentity() inicial antes de decidir qué pintar. -->
+  <div v-if="booting" class="login-cta"><div class="login-card"><p>Cargando…</p></div></div>
+
   <!-- Overlay sin identidad: no permitimos crear cuenta aquí (storage
        particionado por el site visitado). En su lugar, CTA al messenger real. -->
-  <div v-if="!connection.nicknameSet && isReadOnlyEmbed" class="login-cta">
+  <div v-else-if="!connection.nicknameSet && isReadOnlyEmbed" class="login-cta">
     <div class="login-card">
       <img class="login-logo" src="/icons/icon-192.png" alt="Closer Click" />
       <h2>Inicia sesión</h2>
