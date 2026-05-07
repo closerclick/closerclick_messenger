@@ -90,18 +90,18 @@ onMounted(async () => {
   if (!blockedByInsecureTop) {
     try {
       const id = await getIdentity()
+      console.log('[cc-app] boot id.me=', id?.me, 'connection.nickname=', connection.nickname)
       if (id) {
         const vaultNick = id.me?.nickname
         if (vaultNick && !connection.nicknameSet) {
+          console.log('[cc-app] boot: applying nickname from vault →', vaultNick)
           connection.setNickname(vaultNick)
         } else if (!vaultNick && connection.nicknameSet) {
-          // Backfill legacy: usuarios viejos guardaron nick solo en
-          // localStorage('messenger_nickname'). Lo subimos a la vault para
-          // que viaje con el blob a otros contextos.
-          await id.setMyNickname(connection.nickname).catch(() => {})
+          console.log('[cc-app] boot: backfilling vault.me.nickname from localStorage →', connection.nickname)
+          await id.setMyNickname(connection.nickname).catch(e => console.warn('backfill failed', e))
         }
       }
-    } catch (_) {}
+    } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
   if (connection.nicknameSet) {
