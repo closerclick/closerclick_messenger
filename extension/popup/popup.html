@@ -8,7 +8,13 @@
   </style>
 </head>
 <body>
+  <!--
+    Sin `sandbox`: aunque tenía allow-same-origin, Chrome restringe APIs
+    como crypto.randomUUID en iframes sandboxed, y rompe el lib del store
+    (sync.js getDeviceId). messenger.closer.click es nuestro propio origen
+    con host_permissions explícitas, no necesita sandbox extra.
+  -->
   <iframe src="https://messenger.closer.click/?embed=popup"
-          sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+          allow="clipboard-read; clipboard-write"></iframe>
 </body>
 </html>
