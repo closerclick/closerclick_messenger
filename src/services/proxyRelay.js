@@ -28,31 +28,38 @@ export async function relayProxyCall (method, args) {
 
 /**
  * Solo para offscreen: procesa la cola.
- * `processor(item)` debe ser async y NO debe lanzar.
- * Quita los items procesados del array atomícamente.
+ * `processor(item)` debe ser async y devolver true si fue procesado (se quita
+ * de la cola) o false para reintentar más tarde.
+ *
+ * Devuelve `{ drain, dispose }`: `drain()` fuerza un re-procesamiento inmediato
+ * (útil cuando `isConnected` cambia a true y hay items pendientes), `dispose()`
+ * se desuscribe del onKvChanged.
  */
 export function watchOutboundQueue (processor) {
+  let inFlight = false
   const drain = async () => {
-    const arr = await kvGet(QUEUE_KEY)
-    if (!Array.isArray(arr) || arr.length === 0) return
-    // Procesa cada item; si processor falla, lo dejamos en cola para reintento.
-    const remaining = []
-    for (const item of arr) {
-      try {
-        const ok = await processor(item)
-        if (!ok) remaining.push(item)
-      } catch (_) {
-        remaining.push(item)
+    if (inFlight) return
+    inFlight = true
+    try {
+      const arr = await kvGet(QUEUE_KEY)
+      if (!Array.isArray(arr) || arr.length === 0) return
+      const remaining = []
+      for (const item of arr) {
+        try {
+          const ok = await processor(item)
+          if (!ok) remaining.push(item)
+        } catch (_) {
+          remaining.push(item)
+        }
       }
-    }
-    if (remaining.length !== arr.length) {
-      await kvSet(QUEUE_KEY, remaining)
-    }
+      if (remaining.length !== arr.length) await kvSet(QUEUE_KEY, remaining)
+    } finally { inFlight = false }
   }
-  // Drain al inicio (puede haber items previos sin procesar).
+  // Drain al inicio (items previos).
   drain().catch(() => {})
   // Re-drain ante cualquier cambio en la cola.
-  return onKvChanged((key) => {
+  const dispose = onKvChanged((key) => {
     if (key === QUEUE_KEY) drain().catch(() => {})
   })
+  return { drain, dispose }
 }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Closer Click Messenger",
   "short_name": "CC Messenger",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "End-to-end encrypted P2P messaging overlay on any page. Shares identity, contacts and threads with the Closer Click ecosystem.",
   "homepage_url": "https://github.com/seyacat/closerclick_messenger",
   "author": "seyacat",
