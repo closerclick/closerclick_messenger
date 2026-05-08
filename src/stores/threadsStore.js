@@ -5,6 +5,10 @@ import { useContactsStore } from './contactsStore'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
 import { sanitizeMessage } from '../utils/sanitize'
+import { pushThreadsToBridge, pullThreadsFromBridge, onThreadsChanged } from '../services/threadsBridge'
+
+const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
+const IS_OVERLAY_EMBED = URL_EMBED === 'overlay'
 
 const MAX_THREAD = 1000   // cap per-thread history (server-side cap también)
 const LEGACY_KEY = 'messenger_threads_v1'  // migración del antiguo localStorage
@@ -86,6 +90,8 @@ export const useThreadsStore = defineStore('threads', () => {
     }
     threads.value = next
     saveLocalCache(threads.value)
+    // Comparte snapshot completo con los overlays via chrome.storage bridge.
+    if (!IS_OVERLAY_EMBED) pushThreadsToBridge(threads.value)
   }
 
   // Apend optimista en memoria + escritura asíncrona al store remoto.
@@ -99,6 +105,10 @@ export const useThreadsStore = defineStore('threads', () => {
       threads.value[pubkey] = threads.value[pubkey].slice(-MAX_THREAD)
     }
     saveLocalCache(threads.value)
+    // Espeja al chrome.storage bridge si NO somos un overlay (los overlays
+    // solo leen). Así popups/offscreen/direct tab convergen en una snapshot
+    // que los overlays lectores pueden hidratar.
+    if (!IS_OVERLAY_EMBED) pushThreadsToBridge(threads.value)
     const store = await getStore()
     if (store) {
       try { await store.appendMessage(pubkey, entry) }
@@ -115,6 +125,7 @@ export const useThreadsStore = defineStore('threads', () => {
     if (!e) return
     Object.assign(e, patch)
     saveLocalCache(threads.value)
+    if (!IS_OVERLAY_EMBED) pushThreadsToBridge(threads.value)
     const store = await getStore()
     if (store) { try { await store.appendMessage(pubkey, e) } catch (_) {} }
   }
@@ -485,13 +496,32 @@ export const useThreadsStore = defineStore('threads', () => {
     } catch (e) { console.warn('handleRatingReply:', e) }
   }
 
+  // Overlay: hidrata los threads desde chrome.storage.local (espejado por el
+  // popup/offscreen/direct tab) y se queda escuchando cambios. No corremos
+  // `load()` porque store.closer.click está particionado por el site visitado
+  // y devuelve vacío.
+  if (IS_OVERLAY_EMBED) {
+    ;(async () => {
+      const remote = await pullThreadsFromBridge()
+      if (remote && Object.keys(remote).length > 0) {
+        threads.value = remote
+        saveLocalCache(threads.value)
+      }
+    })().catch(() => {})
+    onThreadsChanged((snapshot) => {
+      if (!snapshot) return
+      threads.value = snapshot
+      saveLocalCache(threads.value)
+    })
+  }
+
   // Carga asíncrona — el UI verá hilos aparecer cuando el store responda.
   // Además, nos suscribimos a `onSync`: el store puede arrancar bloqueado
   // (sin passphrase) y los hilos cifrados solo aparecen tras unlock + sync.
   // Sin esto, al refrescar la página los mensajes no se ven porque `load`
   // corre antes de que el vault esté desbloqueado.
   const reload = () => load().catch(e => console.warn('threads.load failed:', e))
-  reload()
+  if (!IS_OVERLAY_EMBED) reload()
   ;(async () => {
     const store = await getStore()
     if (!store?.onSync) return
