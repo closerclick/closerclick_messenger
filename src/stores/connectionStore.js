@@ -3,6 +3,13 @@ import { ref, computed } from 'vue'
 import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
 import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
+import { relayProxyCall, watchOutboundQueue } from '../services/proxyRelay'
+
+const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
+// Relay mode: el messenger no toca el WebSocket; pone los sends en
+// chrome.storage.local y el offscreen los procesa. Aplica a popup/overlay.
+const IS_RELAY_MODE = URL_EMBED === 'popup' || URL_EMBED === 'overlay'
+const IS_OFFSCREEN = URL_EMBED === 'offscreen'
 
 export const useConnectionStore = defineStore('connection', () => {
   const wsProxyClient = getWebSocketProxyClient()
@@ -36,6 +43,15 @@ export const useConnectionStore = defineStore('connection', () => {
   const queuedDelivered = ref(0)
 
   const connect = async () => {
+    // En modo relay (popup/overlay) NO abrimos WebSocket propio: el offscreen
+    // tiene la única conexión real. Esto evita que cada pestaña HTTPS abierta
+    // sume una conexión más al proxy. Marcamos isConnected=true porque, desde
+    // la perspectiva del UI, los sends sí "salen" (encolados al offscreen).
+    if (IS_RELAY_MODE) {
+      isConnected.value = true
+      console.log('[cc-conn] relay mode: skipping direct WebSocket connect')
+      return
+    }
     try {
       connectionError.value = null
       wsProxyClient.updateConfig({ url: wsUrl.value })
@@ -76,8 +92,32 @@ export const useConnectionStore = defineStore('connection', () => {
     token.value = null
   }
 
-  const sendMessage = (toTokens, raw) => wsProxyClient.send(toTokens, raw)
-  const sendByPubkey = (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
+  // En modo relay, sendMessage/sendByPubkey encolan en chrome.storage.local
+  // bajo `cc-outbound-v1`. El offscreen (más abajo) escucha y procesa la cola
+  // con su WebSocket único. Los demás contextos (direct tab, offscreen) usan
+  // el client directamente.
+  const sendMessage = IS_RELAY_MODE
+    ? (toTokens, raw) => relayProxyCall('send', [toTokens, raw])
+    : (toTokens, raw) => wsProxyClient.send(toTokens, raw)
+  const sendByPubkey = IS_RELAY_MODE
+    ? (toPubkeys, raw) => relayProxyCall('sendByPubkey', [toPubkeys, raw])
+    : (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
+
+  // Solo el offscreen es procesador de la cola: tiene la única conexión.
+  if (IS_OFFSCREEN) {
+    watchOutboundQueue(async (item) => {
+      if (!isConnected.value) return false  // reintenta cuando estemos conectados
+      try {
+        if (item.method === 'send') wsProxyClient.send(...item.args)
+        else if (item.method === 'sendByPubkey') wsProxyClient.sendByPubkey(...item.args)
+        else { console.warn('relay: unknown method', item.method); return true } // descartar
+        return true
+      } catch (e) {
+        console.warn('relay: process failed:', e)
+        return false
+      }
+    })
+  }
 
   const setPresenceChannel = (name) => { presenceChannel.value = name }
 

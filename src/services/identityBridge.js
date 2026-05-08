@@ -80,3 +80,34 @@ export function onIdentityBlobChanged (handler) {
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)
 }
+
+// ---- KV genérico (chrome.storage.local) -----------------------------------
+// Las claves deben prefijarse con `cc-` (validado en el host). Los iframes del
+// messenger usan esto para outbound queues, state mirror, etc.
+
+export async function kvGet (key) {
+  try { return await call('kv-get', { key }) }
+  catch (e) { console.warn('[cc-id-bridge] kv-get failed:', e.message); return null }
+}
+
+export async function kvSet (key, value) {
+  try { return await call('kv-set', { key, value }) }
+  catch (e) { console.warn('[cc-id-bridge] kv-set failed:', e.message); return null }
+}
+
+/** Append atómico a un array bajo `key`. Devuelve el nuevo length. */
+export async function kvAppendArray (key, item) {
+  try { return await call('kv-append-array', { key, item }) }
+  catch (e) { console.warn('[cc-id-bridge] kv-append failed:', e.message); return null }
+}
+
+/** Suscríbete a cambios en cualquier clave kv (cc-*). Handler recibe (key, value). */
+export function onKvChanged (handler) {
+  ensureWired()
+  const listener = (ev) => {
+    const m = ev.data
+    if (m?.source === 'cc-id-bridge' && m.type === 'kv-changed') handler(m.key, m.value)
+  }
+  window.addEventListener('message', listener)
+  return () => window.removeEventListener('message', listener)
+}

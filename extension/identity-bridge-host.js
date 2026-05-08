@@ -35,27 +35,42 @@
   window.addEventListener('message', async (event) => {
     const msg = event.data
     if (!msg || msg.source !== 'cc-id-bridge' || msg.type !== 'request') return
-    const { id, op, blob } = msg
-    LOG('request', { id, op, hasBlob: !!blob, fromOrigin: event.origin })
+    const { id, op, blob, key, value, item } = msg
+    LOG('request', { id, op, key, fromOrigin: event.origin })
     if (!chrome?.storage?.local) {
       LOG('chrome.storage unavailable')
       reply(event.source, event.origin, id, { error: 'chrome.storage unavailable' })
       return
     }
     try {
+      // Identity-blob shortcut ops (compatibilidad con la API original).
       if (op === 'get') {
         const r = await chrome.storage.local.get(STORAGE_KEY)
         const stored = r?.[STORAGE_KEY] || null
-        LOG('get result', stored ? 'blob present' : 'empty')
         reply(event.source, event.origin, id, { result: stored })
       } else if (op === 'set') {
         await chrome.storage.local.set({ [STORAGE_KEY]: blob })
-        LOG('set ok')
         reply(event.source, event.origin, id, { result: true })
       } else if (op === 'clear') {
         await chrome.storage.local.remove(STORAGE_KEY)
-        LOG('cleared')
         reply(event.source, event.origin, id, { result: true })
+      // KV genérico: el messenger usa esto para outbound queue, mirror de
+      // estado, etc. Las claves deben empezar con `cc-` por convención.
+      } else if (op === 'kv-get') {
+        if (typeof key !== 'string' || !key.startsWith('cc-')) throw new Error('key must start with cc-')
+        const r = await chrome.storage.local.get(key)
+        reply(event.source, event.origin, id, { result: r?.[key] ?? null })
+      } else if (op === 'kv-set') {
+        if (typeof key !== 'string' || !key.startsWith('cc-')) throw new Error('key must start with cc-')
+        await chrome.storage.local.set({ [key]: value })
+        reply(event.source, event.origin, id, { result: true })
+      } else if (op === 'kv-append-array') {
+        if (typeof key !== 'string' || !key.startsWith('cc-')) throw new Error('key must start with cc-')
+        const r = await chrome.storage.local.get(key)
+        const arr = Array.isArray(r?.[key]) ? r[key] : []
+        arr.push(item)
+        await chrome.storage.local.set({ [key]: arr })
+        reply(event.source, event.origin, id, { result: arr.length })
       } else {
         reply(event.source, event.origin, id, { error: `unknown op: ${op}` })
       }
@@ -71,17 +86,31 @@
   // protocolos de MessageChannel.
   if (chrome?.storage?.onChanged?.addListener) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local' || !changes[STORAGE_KEY]) return
-      const all = document.querySelectorAll('iframe')
-      for (const f of all) {
+      if (area !== 'local') return
+      const messengerFrames = []
+      for (const f of document.querySelectorAll('iframe')) {
         const src = f.src || ''
-        if (!src.startsWith('https://messenger.closer.click/')) continue
-        try {
-          f.contentWindow?.postMessage(
+        if (src.startsWith('https://messenger.closer.click/')) messengerFrames.push(f)
+      }
+      if (messengerFrames.length === 0) return
+      // Identity blob (legacy 'changed' event keeps old shape).
+      if (changes[STORAGE_KEY]) {
+        for (const f of messengerFrames) {
+          try { f.contentWindow?.postMessage(
             { source: 'cc-id-bridge', type: 'changed', blob: changes[STORAGE_KEY].newValue || null },
             'https://messenger.closer.click'
-          )
-        } catch (_) {}
+          ) } catch (_) {}
+        }
+      }
+      // KV generic: notifica cualquier cambio en claves cc-*.
+      for (const key in changes) {
+        if (key === STORAGE_KEY || !key.startsWith('cc-')) continue
+        for (const f of messengerFrames) {
+          try { f.contentWindow?.postMessage(
+            { source: 'cc-id-bridge', type: 'kv-changed', key, value: changes[key].newValue ?? null },
+            'https://messenger.closer.click'
+          ) } catch (_) {}
+        }
       }
     })
   }

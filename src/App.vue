@@ -121,16 +121,23 @@ onMounted(async () => {
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
-  // En overlay NO conectamos al proxy ni hacemos announceToKnown al boot.
-  // Cada tab HTTPS tiene su propio overlay y conectarlos todos = inundar el
-  // proxy (rate-limited / ban). El offscreen mantiene UNA conexión persistente
-  // que recibe DMs y los reenvía a los overlays vía chrome.runtime.
-  // Si el usuario abre el panel y manda un mensaje, conectamos lazy ahí.
-  if (connection.nicknameSet && !isReadOnlyEmbed) {
+  // El offscreen es el único contexto que abre WebSocket directo al proxy
+  // y dispara announceToKnown. Popup/overlay viven en modo relay: no se
+  // conectan, encolan operaciones que el offscreen procesa. La pestaña
+  // directa de messenger.closer.click se comporta como antes (sin extensión
+  // sería el único contexto, así que sí conecta).
+  if (connection.nicknameSet && !embed) {
+    // Pestaña directa.
+    await connection.connect()
+    await contacts.refreshPeers()
+    setTimeout(announceToKnown, 500)
+  } else if (connection.nicknameSet && embed === 'offscreen') {
+    // Offscreen de la extensión.
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)
   }
+  // popup / overlay: solo UI. No connect, no announce.
 })
 
 onUnmounted(() => {
