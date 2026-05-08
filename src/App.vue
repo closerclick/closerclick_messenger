@@ -121,10 +121,17 @@ onMounted(async () => {
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
-  if (connection.nicknameSet) {
+  // Overlay no abre conexión propia ni hace announceToKnown — el offscreen
+  // mantiene una sola conexión por usuario y procesa los sends de overlays
+  // vía cc-outbound-v1. Popup/offscreen/direct tab sí conectan normalmente.
+  if (connection.nicknameSet && !isReadOnlyEmbed) {
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)
+  } else if (connection.nicknameSet && isReadOnlyEmbed) {
+    // Mark connected (UI dot) — los sends salen por relay.
+    await connection.connect()
+    await contacts.refreshPeers()
   }
 })
 

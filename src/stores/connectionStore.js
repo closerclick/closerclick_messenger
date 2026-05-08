@@ -3,6 +3,14 @@ import { ref, computed } from 'vue'
 import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
 import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
+import { relayProxyCall, watchOutboundQueue } from '../services/proxyRelay'
+
+const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
+// Solo overlay (FAB en sites HTTPS) usa relay: una pestaña con FAB activo
+// cada una abriendo conexión al proxy = spam → ban. Popup pineado y direct
+// tab abren su propia conexión normal.
+const IS_RELAY_MODE = URL_EMBED === 'overlay'
+const IS_OFFSCREEN = URL_EMBED === 'offscreen'
 
 export const useConnectionStore = defineStore('connection', () => {
   const wsProxyClient = getWebSocketProxyClient()
@@ -36,6 +44,12 @@ export const useConnectionStore = defineStore('connection', () => {
   const queuedDelivered = ref(0)
 
   const connect = async () => {
+    if (IS_RELAY_MODE) {
+      // Overlay: no abre WebSocket; los sends salen vía cc-outbound-v1.
+      isConnected.value = true
+      console.log('[cc-conn] overlay → relay mode (no direct WebSocket)')
+      return
+    }
     try {
       connectionError.value = null
       wsProxyClient.updateConfig({ url: wsUrl.value })
@@ -76,14 +90,42 @@ export const useConnectionStore = defineStore('connection', () => {
     token.value = null
   }
 
-  const sendMessage = (toTokens, raw) => wsProxyClient.send(toTokens, raw)
-  const sendByPubkey = (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
+  // Overlay: encola en chrome.storage.local para que el offscreen procese.
+  // Resto: usa wsProxyClient directo.
+  const sendMessage = IS_RELAY_MODE
+    ? (toTokens, raw) => relayProxyCall('send', [toTokens, raw])
+    : (toTokens, raw) => wsProxyClient.send(toTokens, raw)
+  const sendByPubkey = IS_RELAY_MODE
+    ? (toPubkeys, raw) => relayProxyCall('sendByPubkey', [toPubkeys, raw])
+    : (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
+
+  // Solo el offscreen procesa la cola.
+  let queueWatcher = null
+  if (IS_OFFSCREEN) {
+    queueWatcher = watchOutboundQueue(async (item) => {
+      if (!isConnected.value) return false  // reintenta cuando estemos conectados
+      try {
+        if (item.method === 'send') wsProxyClient.send(...item.args)
+        else if (item.method === 'sendByPubkey') wsProxyClient.sendByPubkey(...item.args)
+        else { console.warn('relay: unknown method', item.method); return true }
+        return true
+      } catch (e) {
+        console.warn('relay: process failed:', e)
+        return false
+      }
+    })
+  }
 
   const setPresenceChannel = (name) => { presenceChannel.value = name }
 
   const setupHandlers = () => {
     wsProxyClient.on('token', (t) => { token.value = t })
-    wsProxyClient.on('connect', () => { isConnected.value = true; connectionError.value = null })
+    wsProxyClient.on('connect', () => {
+      isConnected.value = true
+      connectionError.value = null
+      // Re-procesar items deferidos en la cola al (re)conectar.
+      if (queueWatcher) queueWatcher.drain().catch(() => {})
+    })
     wsProxyClient.on('disconnect', () => { isConnected.value = false; token.value = null })
     wsProxyClient.on('error', (err) => {
       connectionError.value = err.error || err.message || 'Unknown error'
