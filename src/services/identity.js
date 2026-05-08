@@ -19,30 +19,50 @@ import { getIdentityBlob, setIdentityBlob, onIdentityBlobChanged } from './ident
 let _instance = null
 let _connectPromise = null
 
-// Si corremos como iframe de la extensión (popup, overlay, offscreen), antes
-// de devolver el vault al consumidor intentamos hidratarlo desde el bridge.
-// El offscreen empuja periódicamente su `exportIdentity()` a chrome.storage.local;
-// los overlays particionados lo leen al primer arranque para no generar una
-// identidad nueva en su bucket aislado.
+// Estado del bridge para evitar loops:
+//  - `_lastPushedHash`: blob ya publicado (skip si no cambia).
+//  - `_isImporting`: flag mientras corremos `id.importIdentity` desde el
+//    bridge — los mutadores que dispare el import (saveMe, savePeers en el
+//    vault) NO deben volver a pushear, sino se forma un loop entre contextos.
+let _lastPushedHash = null
+let _isImporting = false
+
+function hashBlob (blob) {
+  if (!blob) return ''
+  // Hash barato: primeros chars del JSON. No es criptográfico, solo dedup.
+  try {
+    const s = JSON.stringify(blob)
+    let h = 0
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
+    return s.length + ':' + h
+  } catch { return Math.random().toString(36) }
+}
+
 async function bridgeImportIfAvailable (id) {
-  if (window === window.top) return  // no embed → nada que hacer
+  if (window === window.top) return
   try {
     const blob = await getIdentityBlob()
     if (!blob) return
-    await id.importIdentity(blob)
+    _isImporting = true
+    try {
+      await id.importIdentity(blob)
+      _lastPushedHash = hashBlob(blob)  // ya está sincronizado con el bridge
+    } finally { _isImporting = false }
     console.log('[cc-id-bridge] vault hidratado desde el bridge')
   } catch (e) {
     console.warn('[cc-id-bridge] import inicial falló:', e?.message || e)
   }
 }
 
-// Después de mutaciones de identidad en este vault, empujamos el blob al
-// bridge para que otros contextos (el offscreen, popups, overlays en otras
-// pestañas) puedan converger.
 async function bridgePush (id) {
+  if (_isImporting) return  // evita echo loop con onIdentityBlobChanged
   try {
     const blob = await id.exportIdentity()
-    if (blob) await setIdentityBlob(blob)
+    if (!blob) return
+    const h = hashBlob(blob)
+    if (h === _lastPushedHash) return  // sin cambios, no duplicamos
+    _lastPushedHash = h
+    await setIdentityBlob(blob)
   } catch (e) {
     console.warn('[cc-id-bridge] push falló:', e?.message || e)
   }
@@ -85,8 +105,12 @@ function attachExternalSync (id) {
   if (window === window.top) return
   onIdentityBlobChanged(async (blob) => {
     if (!blob) return
-    try { await id.importIdentity(blob) }
+    const h = hashBlob(blob)
+    if (h === _lastPushedHash) return  // ya estamos al día (probablemente lo escribimos nosotros)
+    _isImporting = true
+    try { await id.importIdentity(blob); _lastPushedHash = h }
     catch (e) { console.warn('[cc-id-bridge] re-import on change failed:', e?.message || e) }
+    finally { _isImporting = false }
   })
 }
 
