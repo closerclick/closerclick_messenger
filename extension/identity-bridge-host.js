@@ -20,10 +20,21 @@
   window.__cc_identity_bridge_host = true
 
   const STORAGE_KEY = 'cc-identity-blob-v1'
+  // Si NO tenemos chrome.storage en este contexto, no nos registramos como
+  // host del bridge: dejamos que otra copia (la que sí tiene storage)
+  // responda a los postMessages. Sin esto, esta copia "ciega" responde
+  // primero con error y rompe el flujo.
+  if (!chrome?.storage?.local) {
+    console.log('[cc-id-bridge:host] skipped (no chrome.storage in this context)', {
+      href: location.href,
+      isContentScript: typeof chrome?.runtime?.id === 'string'
+    })
+    return
+  }
   const LOG = (...a) => console.log('[cc-id-bridge:host]', ...a)
   LOG('loaded', {
     href: location.href,
-    hasChromeStorage: !!chrome?.storage?.local,
+    hasChromeStorage: true,
     hasOnChanged: !!chrome?.storage?.onChanged
   })
 
