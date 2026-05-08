@@ -10,6 +10,10 @@ const emit = defineEmits(['done'])
 const visible = ref(false)
 const phase = ref('hidden')   // 'hidden' | 'in' | 'shown' | 'out'
 
+const FADE_IN_MS = 1000
+const VISIBLE_MS = 5000
+const FADE_OUT_MS = 1000
+
 let timers = []
 function clearTimers () {
   for (const t of timers) clearTimeout(t)
@@ -20,25 +24,26 @@ watch(() => props.dm, (next) => {
   if (!next) return
   clearTimers()
   visible.value = true
-  // fade-in
   phase.value = 'in'
-  timers.push(setTimeout(() => { phase.value = 'shown' }, 500))
-  // visible 5s, then fade-out
-  timers.push(setTimeout(() => { phase.value = 'out' }, 5500))
-  // remove + signal done after fade-out
+  timers.push(setTimeout(() => { phase.value = 'shown' }, FADE_IN_MS))
+  timers.push(setTimeout(() => { phase.value = 'out' }, FADE_IN_MS + VISIBLE_MS))
   timers.push(setTimeout(() => {
     visible.value = false
     phase.value = 'hidden'
     emit('done', next.id)
-  }, 6000))
+  }, FADE_IN_MS + VISIBLE_MS + FADE_OUT_MS))
 }, { immediate: true })
 </script>
 
 <template>
-  <div v-if="visible" :class="['cc-incoming', 'phase-' + phase]" aria-live="polite">
-    <div class="card">
-      <div class="from">{{ dm?.fromNickname || 'Mensaje nuevo' }}</div>
-      <div class="text">{{ dm?.text }}</div>
+  <div
+    v-if="visible"
+    :class="['cc-incoming', 'phase-' + phase]"
+    aria-live="polite"
+  >
+    <div class="cc-incoming-card">
+      <div class="cc-incoming-from">{{ dm?.fromNickname || 'Mensaje nuevo' }}</div>
+      <div class="cc-incoming-text">{{ dm?.text }}</div>
     </div>
   </div>
 </template>
@@ -53,37 +58,60 @@ watch(() => props.dm, (next) => {
   pointer-events: none;
   z-index: 99999;
   opacity: 0;
-  transition: opacity 0.5s ease;
+  transition: opacity 1s ease;
+  background: rgba(0, 0, 0, 0);
 }
 .cc-incoming.phase-in,
 .cc-incoming.phase-shown {
   opacity: 1;
+  background: rgba(0, 0, 0, 0.18);
 }
 .cc-incoming.phase-out {
   opacity: 0;
+  background: rgba(0, 0, 0, 0);
 }
-.card {
+
+.cc-incoming-card {
   background: var(--bg-2, #fff);
   color: var(--text, #2b2118);
   border: 1px solid var(--border, #d8c9b6);
-  border-radius: 16px;
-  padding: 22px 28px;
-  max-width: min(440px, 80vw);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  border-radius: 18px;
+  padding: 24px 30px;
+  max-width: min(460px, 82vw);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
   pointer-events: auto;
   text-align: center;
+  transform: translateY(0);
 }
-.from {
+.cc-incoming.phase-in .cc-incoming-card {
+  animation: cc-pop-in 1s ease both;
+}
+.cc-incoming.phase-out .cc-incoming-card {
+  animation: cc-pop-out 1s ease both;
+}
+@keyframes cc-pop-in {
+  from { transform: translateY(12px) scale(0.96); }
+  to   { transform: translateY(0) scale(1); }
+}
+@keyframes cc-pop-out {
+  from { transform: translateY(0) scale(1); }
+  to   { transform: translateY(-8px) scale(0.98); }
+}
+
+.cc-incoming-from {
   font-family: var(--font-headline);
   font-weight: 600;
   font-size: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--accent, #c0392b);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-.text {
-  font-size: 16px;
-  line-height: 1.4;
+.cc-incoming-text {
+  font-size: 17px;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-wrap: break-word;
+  color: var(--text, #2b2118);
 }
 </style>

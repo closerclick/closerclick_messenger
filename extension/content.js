@@ -69,31 +69,35 @@
     root.className = 'cc-root'
     shadow.appendChild(root)
 
-    // ----- toasts (mouse pass-through container) -----
-    const toastWrap = document.createElement('div')
-    toastWrap.className = 'cc-toasts'
-    root.appendChild(toastWrap)
-
-    function showToast (dm) {
-      const el = document.createElement('div')
-      el.className = 'cc-toast'
-      const head = document.createElement('div')
-      head.className = 'cc-toast-head'
-      head.textContent = `💬 ${dm.fromNickname || 'Closer Click'}${dm.queued ? ' (offline)' : ''}`
-      const body = document.createElement('div')
-      body.className = 'cc-toast-body'
-      body.textContent = dm.text || ''
-      el.appendChild(head); el.appendChild(body)
-      el.addEventListener('click', () => { openPanel(); fadeOut(el) })
-      toastWrap.appendChild(el)
-      requestAnimationFrame(() => el.classList.add('show'))
-      setTimeout(() => fadeOut(el), 5000)
-    }
-
-    function fadeOut (el) {
-      el.classList.remove('show')
-      el.classList.add('leaving')
-      setTimeout(() => el.remove(), 300)
+    // ----- notificación centrada de DM entrante -----
+    // Vive en el Shadow DOM del content script (mismo viewport que la página
+    // padre) → `position:fixed` centra realmente en la ventana del navegador,
+    // no en el iframe del messenger (que es solo el panel pequeño).
+    function showCenteredCard (dm) {
+      const overlay = document.createElement('div')
+      overlay.className = 'cc-incoming-overlay phase-hidden'
+      const card = document.createElement('div')
+      card.className = 'cc-incoming-card'
+      const from = document.createElement('div')
+      from.className = 'cc-incoming-from'
+      from.textContent = dm.fromNickname || 'Mensaje nuevo'
+      const text = document.createElement('div')
+      text.className = 'cc-incoming-text'
+      text.textContent = dm.text || ''
+      card.appendChild(from)
+      card.appendChild(text)
+      overlay.appendChild(card)
+      root.appendChild(overlay)
+      // fade-in 1s → visible 5s → fade-out 1s → remove
+      requestAnimationFrame(() => {
+        overlay.classList.remove('phase-hidden')
+        overlay.classList.add('phase-shown')
+      })
+      setTimeout(() => {
+        overlay.classList.remove('phase-shown')
+        overlay.classList.add('phase-out')
+      }, 1000 + 5000)
+      setTimeout(() => { try { overlay.remove() } catch (_) {} }, 1000 + 5000 + 1000 + 50)
     }
 
     // ----- floating action button -----
@@ -135,7 +139,7 @@
     // ----- runtime events del SW -----
     chrome.runtime.onMessage.addListener((msg) => {
       if (!msg) return
-      if (msg.kind === 'incoming_dm' && msg.dm) showToast(msg.dm)
+      if (msg.kind === 'incoming_dm' && msg.dm) showCenteredCard(msg.dm)
     })
 
     if (!document.body) {
