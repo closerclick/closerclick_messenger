@@ -95,9 +95,15 @@ async function _doPush (id) {
 // `offscreen` corren en chrome-extension://, tienen storage unpartitioned
 // vía host_permissions y SÍ son fuente de verdad — propagamos sus cambios.
 function isWriteAuthorisedEmbed () {
-  if (window === window.top) return true  // pestaña normal
+  if (window === window.top) return true  // pestaña normal: source of truth
   const embed = new URLSearchParams(location.search).get('embed')
-  return embed === 'popup' || embed === 'offscreen'
+  // Solo offscreen escribe entre los embeds. El popup pineado IMPORTA del
+  // bridge pero NO empuja: el iframe `id.closer.click` anidado dentro del
+  // popup no garantiza acceso unpartitioned (nested iframe en extension page),
+  // así que su vault podría tener partition propia con claves fresh. Si pushea
+  // sobreescribe la identidad real → la pestaña directa se ve como usuario
+  // nuevo. Mejor consumirlo solo.
+  return embed === 'offscreen'
 }
 
 // Wraps a few mutating methods so each successful call snapshots the vault
@@ -151,13 +157,10 @@ export async function getIdentity () {
       await bridgeImportIfAvailable(inst)
       attachAutoPush(inst)
       attachExternalSync(inst)
-      // Cualquier contexto con write authority publica su blob al bridge
-      // inmediatamente: pestaña directa de messenger.closer.click, popup
-      // pineado y offscreen. La extensión inyecta `identity-bridge-host.js`
-      // también en messenger.closer.click, así que la pestaña directa puede
-      // hablar con chrome.storage.local vía window.postMessage a sí misma.
+      // Push inicial sin debounce: queremos el blob en chrome.storage.local
+      // desde el primer momento del boot, no después de la primera mutación.
       if (isWriteAuthorisedEmbed()) {
-        bridgePush(inst).catch(() => {})
+        _doPush(inst).catch(() => {})
       }
       _instance = inst
       return _instance
