@@ -121,23 +121,20 @@ onMounted(async () => {
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
-  // El offscreen es el único contexto que abre WebSocket directo al proxy
-  // y dispara announceToKnown. Popup/overlay viven en modo relay: no se
-  // conectan, encolan operaciones que el offscreen procesa. La pestaña
-  // directa de messenger.closer.click se comporta como antes (sin extensión
-  // sería el único contexto, así que sí conecta).
+  console.log('[cc-app] boot post-bridge', { embed, nicknameSet: connection.nicknameSet, build: 'v1.7.2' })
   if (connection.nicknameSet && !embed) {
-    // Pestaña directa.
+    console.log('[cc-app] direct tab → connecting')
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)
   } else if (connection.nicknameSet && embed === 'offscreen') {
-    // Offscreen de la extensión.
+    console.log('[cc-app] offscreen → connecting')
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)
+  } else {
+    console.log('[cc-app] no connect (popup/overlay relay mode or no nickname)')
   }
-  // popup / overlay: solo UI. No connect, no announce.
 })
 
 onUnmounted(() => {

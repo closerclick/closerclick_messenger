@@ -6,10 +6,9 @@ import { sanitizeNickname } from '../utils/sanitize'
 import { relayProxyCall, watchOutboundQueue } from '../services/proxyRelay'
 
 const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
-// Relay mode: el messenger no toca el WebSocket; pone los sends en
-// chrome.storage.local y el offscreen los procesa. Aplica a popup/overlay.
 const IS_RELAY_MODE = URL_EMBED === 'popup' || URL_EMBED === 'overlay'
 const IS_OFFSCREEN = URL_EMBED === 'offscreen'
+console.log('[cc-conn] module loaded', { URL_EMBED, IS_RELAY_MODE, IS_OFFSCREEN, build: 'v1.7.1' })
 
 export const useConnectionStore = defineStore('connection', () => {
   const wsProxyClient = getWebSocketProxyClient()
