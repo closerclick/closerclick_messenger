@@ -29,9 +29,12 @@ let _isImporting = false
 
 function hashBlob (blob) {
   if (!blob) return ''
-  // Hash barato: primeros chars del JSON. No es criptográfico, solo dedup.
+  // Excluimos `exportedAt` — vault lo regenera con `new Date().toISOString()`
+  // en cada `exportIdentity()`, así que un JSON.stringify directo siempre
+  // difiere y el dedup no aplicaría.
   try {
-    const s = JSON.stringify(blob)
+    const { exportedAt, ...rest } = blob
+    const s = JSON.stringify(rest)
     let h = 0
     for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
     return s.length + ':' + h
