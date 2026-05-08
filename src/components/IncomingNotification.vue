@@ -55,21 +55,15 @@ watch(() => props.dm, (next) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: none;   /* solo el card responde a hover/click */
   z-index: 99999;
+  background: transparent;
   opacity: 0;
   transition: opacity 1s ease;
-  background: rgba(0, 0, 0, 0);
 }
 .cc-incoming.phase-in,
-.cc-incoming.phase-shown {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.18);
-}
-.cc-incoming.phase-out {
-  opacity: 0;
-  background: rgba(0, 0, 0, 0);
-}
+.cc-incoming.phase-shown { opacity: 1; }
+.cc-incoming.phase-out   { opacity: 0; }
 
 .cc-incoming-card {
   background: var(--bg-2, #fff);

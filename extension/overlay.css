@@ -43,23 +43,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: none;   /* no captura clicks fuera del card */
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0);
+  background: transparent; /* solo el card es visible */
   opacity: 0;
-  transition: opacity 1s ease, background 1s ease;
+  transition: opacity 1s ease;
 }
-.cc-incoming-overlay.phase-hidden {
-  opacity: 0;
-}
-.cc-incoming-overlay.phase-shown {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.18);
-}
-.cc-incoming-overlay.phase-out {
-  opacity: 0;
-  background: rgba(0, 0, 0, 0);
-}
+.cc-incoming-overlay.phase-hidden { opacity: 0; }
+.cc-incoming-overlay.phase-shown { opacity: 1; }
+.cc-incoming-overlay.phase-out   { opacity: 0; }
 .cc-incoming-card {
   background: #ffffff;
   color: #2b2118;
