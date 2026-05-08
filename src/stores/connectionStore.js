@@ -3,16 +3,6 @@ import { ref, computed } from 'vue'
 import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
 import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
-import { relayProxyCall, watchOutboundQueue } from '../services/proxyRelay'
-
-const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
-// Solo el overlay (FAB en cualquier site HTTPS) usa relay: cada pestaña HTTPS
-// abierta tendría su propia conexión = spam al proxy. Popup pineado y direct
-// tab abren su propia conexión normal — son interacciones intencionales del
-// usuario, una a la vez.
-const IS_RELAY_MODE = URL_EMBED === 'overlay'
-const IS_OFFSCREEN = URL_EMBED === 'offscreen'
-console.log('[cc-conn] module loaded', { URL_EMBED, IS_RELAY_MODE, IS_OFFSCREEN, build: 'v1.7.3' })
 
 export const useConnectionStore = defineStore('connection', () => {
   const wsProxyClient = getWebSocketProxyClient()
@@ -46,25 +36,19 @@ export const useConnectionStore = defineStore('connection', () => {
   const queuedDelivered = ref(0)
 
   const connect = async () => {
-    console.log('[cc-conn] connect() called', { embed: URL_EMBED, IS_RELAY_MODE, IS_OFFSCREEN, url: wsUrl.value })
-    if (IS_RELAY_MODE) {
-      isConnected.value = true
-      console.log('[cc-conn] relay mode: skipping direct WebSocket connect')
-      return
-    }
     try {
       connectionError.value = null
       wsProxyClient.updateConfig({ url: wsUrl.value })
       if (!handlersSetup) { setupHandlers(); handlersSetup = true }
       const assigned = await wsProxyClient.connect()
-      console.log('[cc-conn] WebSocket connected, token:', assigned)
       if (assigned && !token.value) token.value = assigned
       isConnected.value = true
+      // Identificarse con la pubkey del vault para activar la cola offline.
       identifyWithVault().catch(e => console.warn('identify failed:', e))
     } catch (e) {
       connectionError.value = e.message
       isConnected.value = false
-      console.error('[cc-conn] Connection error:', e)
+      console.error('Connection error:', e)
     }
   }
 
@@ -92,50 +76,14 @@ export const useConnectionStore = defineStore('connection', () => {
     token.value = null
   }
 
-  // En modo relay, sendMessage/sendByPubkey encolan en chrome.storage.local
-  // bajo `cc-outbound-v1`. El offscreen (más abajo) escucha y procesa la cola
-  // con su WebSocket único. Los demás contextos (direct tab, offscreen) usan
-  // el client directamente.
-  const sendMessage = IS_RELAY_MODE
-    ? (toTokens, raw) => relayProxyCall('send', [toTokens, raw])
-    : (toTokens, raw) => wsProxyClient.send(toTokens, raw)
-  const sendByPubkey = IS_RELAY_MODE
-    ? (toPubkeys, raw) => relayProxyCall('sendByPubkey', [toPubkeys, raw])
-    : (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
-
-  // Solo el offscreen es procesador de la cola: tiene la única conexión.
-  let queueWatcher = null
-  if (IS_OFFSCREEN) {
-    console.log('[cc-conn] offscreen: registering outbound queue watcher')
-    queueWatcher = watchOutboundQueue(async (item) => {
-      if (!isConnected.value) {
-        console.log('[cc-conn] queue item deferred (not connected yet):', item.method)
-        return false
-      }
-      try {
-        console.log('[cc-conn] queue item dispatch:', item.method, item.args?.[0])
-        if (item.method === 'send') wsProxyClient.send(...item.args)
-        else if (item.method === 'sendByPubkey') wsProxyClient.sendByPubkey(...item.args)
-        else { console.warn('relay: unknown method', item.method); return true }
-        return true
-      } catch (e) {
-        console.warn('relay: process failed:', e)
-        return false
-      }
-    })
-  }
+  const sendMessage = (toTokens, raw) => wsProxyClient.send(toTokens, raw)
+  const sendByPubkey = (toPubkeys, raw) => wsProxyClient.sendByPubkey(toPubkeys, raw)
 
   const setPresenceChannel = (name) => { presenceChannel.value = name }
 
   const setupHandlers = () => {
     wsProxyClient.on('token', (t) => { token.value = t })
-    wsProxyClient.on('connect', () => {
-      isConnected.value = true
-      connectionError.value = null
-      // Cuando volvemos a estar conectados (reconnect, primer connect), re-procesa
-      // la cola por si quedaron items deferidos.
-      if (queueWatcher) queueWatcher.drain().catch(() => {})
-    })
+    wsProxyClient.on('connect', () => { isConnected.value = true; connectionError.value = null })
     wsProxyClient.on('disconnect', () => { isConnected.value = false; token.value = null })
     wsProxyClient.on('error', (err) => {
       connectionError.value = err.error || err.message || 'Unknown error'
