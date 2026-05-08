@@ -42,6 +42,9 @@ export const useThreadsStore = defineStore('threads', () => {
   const ACTIVE_KEY = 'messenger_active_pubkey_v1'
   const activePubkey = ref(localStorage.getItem(ACTIVE_KEY) || null)
   const outbox = ref([])        // messages waiting for recipient to come online
+  // Último DM entrante decodificado, para que App.vue muestre la notificación
+  // centrada cuando llegue uno nuevo.
+  const lastIncomingDM = ref(null)
 
   const activeThread = computed(() => activePubkey.value ? (threads.value[activePubkey.value] || []) : [])
   const activeContact = computed(() => activePubkey.value ? contacts.findByPubkey(activePubkey.value) : null)
@@ -392,6 +395,16 @@ export const useThreadsStore = defineStore('threads', () => {
       }
       append(c.publickey, entry)
 
+      // Notifica a la UI para mostrar la notificación centrada (App.vue
+      // observa `lastIncomingDM` y aplica el fade in/out + mark-as-displayed).
+      lastIncomingDM.value = {
+        id: entry.id,
+        fromPubkey: c.publickey,
+        fromNickname: c.nickname || c.publickey.slice(0, 8),
+        text: cleanText,
+        ts: entry.ts
+      }
+
       // Si el PWA está embebido (extensión / future apps), notifica al parent
       // para que pueda disparar toast/notificación nativa.
       if (window !== window.parent) {
@@ -491,7 +504,7 @@ export const useThreadsStore = defineStore('threads', () => {
   })()
 
   return {
-    threads, activePubkey, activeThread, activeContact, outbox,
+    threads, activePubkey, activeThread, activeContact, outbox, lastIncomingDM,
     setActive, sendDM, flushOutbox,
     handleIncoming, sendHello, sendHelloByPubkey, tryHandshake,
     askRatingsAbout, load

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useConnectionStore } from './stores/connectionStore'
 import { useContactsStore } from './stores/contactsStore'
 import { useThreadsStore } from './stores/threadsStore'
@@ -10,7 +10,9 @@ import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
 import SyncSettingsModal from './components/SyncSettingsModal.vue'
 import HelpTip from './components/HelpTip.vue'
+import IncomingNotification from './components/IncomingNotification.vue'
 import { getIdentity } from './services/identity'
+import { isDisplayed, markDisplayed } from './services/displayedMessages'
 
 const booting = ref(true)
 
@@ -40,6 +42,20 @@ const threads = useThreadsStore()
 const showAdd = ref(false)
 const showSync = ref(false)
 const ratingFor = ref(null)
+
+// Notificación centrada de DM entrante. Solo el primer contexto que vea un
+// DM nuevo (chequeo atómico contra `cc-displayed-msgs-v1` en chrome.storage)
+// lo muestra; los demás (otras pestañas con FAB, popup, offscreen) skip.
+const incomingNotification = ref(null)
+const onIncomingDone = (id) => {
+  if (incomingNotification.value?.id === id) incomingNotification.value = null
+}
+watch(() => threads.lastIncomingDM, async (dm) => {
+  if (!dm?.id) return
+  const wasNew = await markDisplayed(dm.id)
+  if (!wasNew) return  // otra pestaña ya lo mostró
+  incomingNotification.value = dm
+})
 // En mobile, si ya hay conversación restaurada del refresh, abrimos directo
 // el panel de chat; si no, mostramos la lista de contactos.
 const showSidebarMobile = ref(!threads.activePubkey)
@@ -262,6 +278,8 @@ const openMessengerTab = () => {
       :placement="currentTip.placement"
       @dismiss="dismissTip"
     />
+
+    <IncomingNotification :dm="incomingNotification" @done="onIncomingDone" />
   </div>
 </template>
 
