@@ -121,7 +121,12 @@ onMounted(async () => {
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
-  if (connection.nicknameSet) {
+  // En overlay NO conectamos al proxy ni hacemos announceToKnown al boot.
+  // Cada tab HTTPS tiene su propio overlay y conectarlos todos = inundar el
+  // proxy (rate-limited / ban). El offscreen mantiene UNA conexión persistente
+  // que recibe DMs y los reenvía a los overlays vía chrome.runtime.
+  // Si el usuario abre el panel y manda un mensaje, conectamos lazy ahí.
+  if (connection.nicknameSet && !isReadOnlyEmbed) {
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)

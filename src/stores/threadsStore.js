@@ -154,6 +154,12 @@ export const useThreadsStore = defineStore('threads', () => {
       return
     }
     try {
+      // Lazy-connect: en overlay no nos conectamos al proxy al boot para no
+      // spamear (cada tab HTTPS spawnea un overlay). Conectamos solo cuando
+      // el usuario quiere mandar un DM.
+      if (!connection.isConnected) {
+        try { await connection.connect() } catch (e) { console.warn('lazy connect failed:', e) }
+      }
       const id = await getIdentity()
       if (!id) throw new Error('Identity vault no disponible')
       // El proxy direcciona por pubkey: si está online, entrega al instante;
