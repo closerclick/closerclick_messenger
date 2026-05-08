@@ -57,13 +57,32 @@ async function bridgeImportIfAvailable (id) {
   }
 }
 
-async function bridgePush (id) {
-  if (_isImporting) return  // evita echo loop con onIdentityBlobChanged
+// Debounced: si recibimos muchos updates seguidos (típico cuando llegan
+// varios HELLOs y cada uno hace markOnline → updateContact), coalescemos en
+// un solo push tras un intervalo de quietud. Evita inundar chrome.storage.
+let _pushTimer = null
+let _pushPendingId = null
+const PUSH_DEBOUNCE_MS = 800
+
+function bridgePush (id) {
+  if (_isImporting) return
+  _pushPendingId = id
+  if (_pushTimer) clearTimeout(_pushTimer)
+  _pushTimer = setTimeout(() => {
+    _pushTimer = null
+    const target = _pushPendingId
+    _pushPendingId = null
+    _doPush(target).catch(() => {})
+  }, PUSH_DEBOUNCE_MS)
+}
+
+async function _doPush (id) {
+  if (_isImporting) return
   try {
     const blob = await id.exportIdentity()
     if (!blob) return
     const h = hashBlob(blob)
-    if (h === _lastPushedHash) return  // sin cambios, no duplicamos
+    if (h === _lastPushedHash) return
     _lastPushedHash = h
     await setIdentityBlob(blob)
   } catch (e) {
