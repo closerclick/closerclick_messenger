@@ -121,19 +121,16 @@ onMounted(async () => {
     } catch (e) { console.warn('[cc-app] boot identity failed:', e) }
   }
   booting.value = false
-  console.log('[cc-app] boot post-bridge', { embed, nicknameSet: connection.nicknameSet, build: 'v1.7.2' })
-  if (connection.nicknameSet && !embed) {
-    console.log('[cc-app] direct tab → connecting')
-    await connection.connect()
-    await contacts.refreshPeers()
-    setTimeout(announceToKnown, 500)
-  } else if (connection.nicknameSet && embed === 'offscreen') {
-    console.log('[cc-app] offscreen → connecting')
+  console.log('[cc-app] boot post-bridge', { embed, nicknameSet: connection.nicknameSet, build: 'v1.7.3' })
+  // Conectan: pestaña directa, popup pineado y offscreen.
+  // Solo overlay queda en relay mode (sus sends se encolan al offscreen).
+  if (connection.nicknameSet && embed !== 'overlay') {
+    console.log('[cc-app] connecting →', embed || 'direct')
     await connection.connect()
     await contacts.refreshPeers()
     setTimeout(announceToKnown, 500)
   } else {
-    console.log('[cc-app] no connect (popup/overlay relay mode or no nickname)')
+    console.log('[cc-app] no connect (overlay relay mode or no nickname)')
   }
 })
 

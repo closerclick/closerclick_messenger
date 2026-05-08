@@ -6,9 +6,13 @@ import { sanitizeNickname } from '../utils/sanitize'
 import { relayProxyCall, watchOutboundQueue } from '../services/proxyRelay'
 
 const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
-const IS_RELAY_MODE = URL_EMBED === 'popup' || URL_EMBED === 'overlay'
+// Solo el overlay (FAB en cualquier site HTTPS) usa relay: cada pestaña HTTPS
+// abierta tendría su propia conexión = spam al proxy. Popup pineado y direct
+// tab abren su propia conexión normal — son interacciones intencionales del
+// usuario, una a la vez.
+const IS_RELAY_MODE = URL_EMBED === 'overlay'
 const IS_OFFSCREEN = URL_EMBED === 'offscreen'
-console.log('[cc-conn] module loaded', { URL_EMBED, IS_RELAY_MODE, IS_OFFSCREEN, build: 'v1.7.1' })
+console.log('[cc-conn] module loaded', { URL_EMBED, IS_RELAY_MODE, IS_OFFSCREEN, build: 'v1.7.3' })
 
 export const useConnectionStore = defineStore('connection', () => {
   const wsProxyClient = getWebSocketProxyClient()
