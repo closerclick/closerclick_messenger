@@ -2,7 +2,7 @@
 
 ## Filosofía
 
-El eje del ecosistema **CloserClick** es el **autohosteo** y el **control sobre la propia información**: qué comparto, cómo lo comparto y cuándo lo comparto.
+El eje del ecosistema **[CloserClick](https://closer.click)** es el **autohosteo** y el **control sobre la propia información**: qué comparto, cómo lo comparto y cuándo lo comparto.
 
 ### Manifiesto
 
