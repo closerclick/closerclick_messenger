@@ -15,6 +15,7 @@
     <meta name="description" content="Mensajería 1-a-1 con cifrado de extremo a extremo (ECDH+AES-GCM), contactos compartidos entre apps del ecosistema y mensajes offline (hasta 24 h). PWA + extensión." />
     <link rel="canonical" href="https://messenger.closer.click/" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
     <meta property="og:site_name" content="Closer Click" />
     <meta property="og:title" content="Closer Click Messenger" />
     <meta property="og:description" content="Mensajería 1-a-1 con cifrado de extremo a extremo. Tus mensajes, en tu servidor." />
@@ -29,7 +30,20 @@
     <!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
     <script>window.goatcounter={path:function(p){return location.hostname+p}}</script>
     <script data-goatcounter="https://goat.closer.click/count" async src="https://goat.closer.click/count.js"></script>
-  </head>
+      <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Closer Click Messenger",
+      "url": "https://messenger.closer.click/",
+      "description": "Mensajería 1-a-1 con cifrado de extremo a extremo. Tus mensajes, en tu servidor.",
+      "applicationCategory": "CommunicationApplication",
+      "operatingSystem": "Web",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "publisher": { "@type": "Organization", "name": "Closer Click", "url": "https://closer.click/" }
+    }
+    </script>
+</head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
