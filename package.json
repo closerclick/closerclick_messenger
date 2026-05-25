@@ -13,7 +13,7 @@
     "@gatoseya/closer-click-identity": "^0.8.0",
     "@gatoseya/closer-click-proxy-client": "^0.4.0",
     "@gatoseya/closer-click-store": "^0.3.0",
-    "@gatoseya/closer-click-support": "^0.1.6",
+    "@gatoseya/closer-click-support": "^0.1.8",
     "pinia": "^3.0.4",
     "vue": "^3.5.25"
   },
