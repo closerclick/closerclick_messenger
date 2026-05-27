@@ -81,6 +81,11 @@ export const useConnectionStore = defineStore('connection', () => {
     const result = await wsProxyClient.identify({ data, signature })
     myPublickey.value = publickey
     queuedDelivered.value = result?.queued_delivered || 0
+    // Si el usuario activó notificaciones, re-registrar la push subscription
+    // (los endpoints pueden rotar). Silencioso si no optó o falta permiso.
+    import('./notificationsStore.js')
+      .then(m => m.useNotificationsStore().ensureSubscribed())
+      .catch(() => {})
     return result
   }
 

@@ -55,6 +55,19 @@ app.mount('#app')
 
 registerSW({ immediate: true })
 
+// Web Push: el SW (closer-click-push-sw.js, inyectado en el SW de Workbox vía
+// workbox.importScripts) hace postMessage('cc-push-ring') al recibir el timbre.
+// Si la app está abierta, re-identificamos para drenar la cola cifrada del proxy.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (ev) => {
+    if (ev.data && ev.data.type === 'cc-push-ring') {
+      import('./stores/connectionStore.js')
+        .then(m => m.useConnectionStore().identifyWithVault())
+        .catch(() => {})
+    }
+  })
+}
+
 // Handshake con el embedder: cuando esta PWA se carga como iframe (popup,
 // overlay, offscreen), avisamos al parent que arrancamos. El content script
 // del overlay usa esto para distinguir "cargado correctamente" de "bloqueado

@@ -2,8 +2,15 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
+import { useNotificationsStore } from '../stores/notificationsStore'
 
 const emit = defineEmits(['close'])
+
+const notif = useNotificationsStore()
+async function toggleNotifications () {
+  if (notif.enabled) await notif.disable()
+  else await notif.enable()
+}
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || ''
 
@@ -202,6 +209,36 @@ function vaultStatus (s) {
           </div>
         </div>
 
+        <!-- Notificaciones push -->
+        <div class="notif-section">
+          <div class="notif-head">
+            <div>
+              <div class="notif-title">Notificaciones</div>
+              <div class="notif-sub">
+                Recibí un aviso cuando te llegan mensajes con la app cerrada. El
+                contenido viaja cifrado por el proxy; el aviso no lleva tus datos.
+              </div>
+            </div>
+            <button
+              :class="['toggle', { on: notif.enabled }]"
+              :disabled="notif.busy || !notif.supported"
+              @click="toggleNotifications"
+              :aria-pressed="notif.enabled"
+            >
+              <span class="knob"></span>
+            </button>
+          </div>
+          <p v-if="!notif.supported" class="notif-note">
+            Tu navegador no soporta notificaciones push. En iOS, instalá la app
+            en la pantalla de inicio primero.
+          </p>
+          <p v-else-if="notif.permission === 'denied'" class="notif-note">
+            Bloqueaste las notificaciones para este sitio. Habilitalas desde los
+            ajustes del navegador.
+          </p>
+          <p v-if="notif.error" class="error">{{ notif.error }}</p>
+        </div>
+
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="lastEvent" class="event">
           <code>{{ lastEvent.kind }} → {{ lastEvent.status }}</code>
@@ -362,6 +399,42 @@ function vaultStatus (s) {
   font-family: var(--font-mono);
   font-size: 11px;
 }
+
+/* Notificaciones */
+.notif-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.notif-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.notif-title {
+  font-family: var(--font-headline);
+  font-weight: 600; font-size: 14px; color: var(--text);
+  margin-bottom: 3px;
+}
+.notif-sub { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.notif-note { margin: 0; font-size: 12px; color: var(--muted); }
+
+.toggle {
+  flex-shrink: 0;
+  width: 44px; height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  position: relative; cursor: pointer;
+  transition: background .15s ease;
+  padding: 0;
+}
+.toggle .knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s ease;
+}
+.toggle.on { background: var(--online, #2e9e5b); border-color: var(--online, #2e9e5b); }
+.toggle.on .knob { transform: translateX(18px); }
+.toggle:disabled { opacity: .5; cursor: not-allowed; }
 
 .foot {
   padding: 14px 24px;
