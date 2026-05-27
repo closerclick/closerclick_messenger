@@ -36,9 +36,36 @@ Ambos comparten **identidad** (`id.closer.click`) y **histórico de mensajes** (
 - **Contactos compartidos** en el vault.
 - **Histórico compartido** en `store.closer.click` — visible desde web + extensión + futuras apps en el mismo navegador. Con **cache local resiliente** (`localStorage.messenger_threads_cache_v1`): los hilos se hidratan al instante en cada refresh y los mensajes recibidos durante un bache del store remoto (cert caído, vault bloqueado, timeout) sobreviven al reload.
 - **Cola offline 24h** del proxy, multi-instancia con fan-out (web + extensión reciben el mismo DM).
+- **Notificaciones Web Push** (`@gatoseya/closer-click-proxy-client` ≥ 0.5.1): aviso cuando llegan DMs con la app cerrada. Estándar Web Push + VAPID (sin SDK de Firebase, sin trackers). El push es un "timbre" **sin contenido**; el SW despierta, la app reconecta y `identify()` drena la cola cifrada. Activación opt-in desde **👤 Tu cuenta → Notificaciones**. Ver subsección abajo.
 - **PWA**: instalable en móvil; sin cache.
 - **Ranking integrado**: rating propio (★ oro) y derivado por endorsements firmados (★ azul).
 - **Cuenta Google como almacén principal** (botón 👤 en topbar): el usuario inicia sesión con Google y sus claves/contactos/historial viven en su Drive (carpeta privada `appDataFolder`), disponibles en cualquier dispositivo donde entre con la misma cuenta. Los datos se cifran en el navegador con la contraseña personal del usuario (PBKDF2 600 000 iter + AES-256-GCM) antes de subir — Google solo ve bytes opacos. El localStorage local actúa como working copy offline-first; al conectar se merge con la versión remota.
+
+### Notificaciones (Web Push)
+
+Opt-in desde **👤 Tu cuenta → Notificaciones** (toggle). Al activar: pide permiso,
+crea la `PushSubscription` (VAPID) y la registra en el proxy con un sobre firmado
+por el vault (misma pubkey que `identify`). Cuando un contacto te escribe estando
+la app cerrada, el proxy encola el DM **y** dispara un push "timbre" sin contenido;
+el Service Worker lo recibe y, si no hay ventana visible, muestra una notificación
+genérica. Al abrir, `identifyWithVault()` drena la cola cifrada.
+
+Detalles de implementación:
+
+- **Un solo Service Worker**: los handlers de push se inyectan en el SW de Workbox
+  vía `workbox.importScripts: ['closer-click-push-sw.js']` (en `vite.config.js`).
+  El archivo se sirve desde `public/closer-click-push-sw.js` (copia de
+  `@gatoseya/closer-click-proxy-client/sw/`). **No** se registra un segundo SW.
+- **Estado**: `src/stores/notificationsStore.js` (`enable`/`disable`/`ensureSubscribed`),
+  preferencia en `localStorage.messenger_push_enabled`. Tras cada `identify` se
+  re-registra la subscription (los endpoints pueden rotar).
+- **Privacidad**: el contenido nunca pasa por el push service (FCM en Android solo
+  ve el metadato del timbre). No hay JS de terceros ni cookies.
+- **iOS/iPadOS**: Safari solo permite Web Push si la PWA está **instalada** en la
+  pantalla de inicio (el toggle avisa cuando no hay soporte). En Android/desktop
+  funciona también en pestaña normal.
+- **Proxy**: requiere `proxy.closer.click` con VAPID habilitado (ver el repo
+  `simple-websocket-proxy`, `DEPLOY.md`).
 
 ### Configuración OAuth (para que el sync funcione)
 
