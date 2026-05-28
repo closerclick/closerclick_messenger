@@ -32,11 +32,11 @@ Ambos comparten **identidad** (`id.closer.click`) y **histórico de mensajes** (
 
 - **Identidad compartida** con `id.closer.click` (mismas claves entre chat / chess / messenger / extensión).
 - **Mensajes E2E** cifrados con ECDH P-256 + AES-256-GCM (vía `Identity.encrypt/decrypt`).
-- **Transporte WebRTC-first** con fallback al proxy (`@gatoseya/closer-click-proxy-client` ≥ 0.4): los DMs viajan por `RTCDataChannel` entre peers cuando ambos están online (señalización por el propio proxy, STUN-only). Si el DataChannel aún no abrió o el peer está offline, cae automáticamente al proxy WS (con cola de 24h cuando el destinatario no está conectado). El switch token-vs-pubkey en `sendDM` decide la ruta: token conocido → `send([token])` (WebRTC eligible), sin token → `sendByPubkey([pubkey])` (cola offline).
+- **Transporte WebRTC-first** con fallback al proxy (`@closerclick/closer-click-proxy-client` ≥ 0.4): los DMs viajan por `RTCDataChannel` entre peers cuando ambos están online (señalización por el propio proxy, STUN-only). Si el DataChannel aún no abrió o el peer está offline, cae automáticamente al proxy WS (con cola de 24h cuando el destinatario no está conectado). El switch token-vs-pubkey en `sendDM` decide la ruta: token conocido → `send([token])` (WebRTC eligible), sin token → `sendByPubkey([pubkey])` (cola offline).
 - **Contactos compartidos** en el vault.
 - **Histórico compartido** en `store.closer.click` — visible desde web + extensión + futuras apps en el mismo navegador. Con **cache local resiliente** (`localStorage.messenger_threads_cache_v1`): los hilos se hidratan al instante en cada refresh y los mensajes recibidos durante un bache del store remoto (cert caído, vault bloqueado, timeout) sobreviven al reload.
 - **Cola offline 24h** del proxy, multi-instancia con fan-out (web + extensión reciben el mismo DM).
-- **Notificaciones Web Push** (`@gatoseya/closer-click-proxy-client` ≥ 0.5.1): aviso cuando llegan DMs con la app cerrada. Estándar Web Push + VAPID (sin SDK de Firebase, sin trackers). El push es un "timbre" **sin contenido**; el SW despierta, la app reconecta y `identify()` drena la cola cifrada. Activación opt-in desde **👤 Tu cuenta → Notificaciones**. Ver subsección abajo.
+- **Notificaciones Web Push** (`@closerclick/closer-click-proxy-client` ≥ 0.5.1): aviso cuando llegan DMs con la app cerrada. Estándar Web Push + VAPID (sin SDK de Firebase, sin trackers). El push es un "timbre" **sin contenido**; el SW despierta, la app reconecta y `identify()` drena la cola cifrada. Activación opt-in desde **👤 Tu cuenta → Notificaciones**. Ver subsección abajo.
 - **PWA**: instalable en móvil; sin cache.
 - **Ranking integrado**: rating propio (★ oro) y derivado por endorsements firmados (★ azul).
 - **Cuenta Google como almacén principal** (botón 👤 en topbar): el usuario inicia sesión con Google y sus claves/contactos/historial viven en su Drive (carpeta privada `appDataFolder`), disponibles en cualquier dispositivo donde entre con la misma cuenta. Los datos se cifran en el navegador con la contraseña personal del usuario (PBKDF2 600 000 iter + AES-256-GCM) antes de subir — Google solo ve bytes opacos. El localStorage local actúa como working copy offline-first; al conectar se merge con la versión remota.
@@ -55,7 +55,7 @@ Detalles de implementación:
 - **Un solo Service Worker**: los handlers de push se inyectan en el SW de Workbox
   vía `workbox.importScripts: ['closer-click-push-sw.js']` (en `vite.config.js`).
   El archivo se sirve desde `public/closer-click-push-sw.js` (copia de
-  `@gatoseya/closer-click-proxy-client/sw/`). **No** se registra un segundo SW.
+  `@closerclick/closer-click-proxy-client/sw/`). **No** se registra un segundo SW.
 - **Estado**: `src/stores/notificationsStore.js` (`enable`/`disable`/`ensureSubscribed`),
   preferencia en `localStorage.messenger_push_enabled`. Tras cada `identify` se
   re-registra la subscription (los endpoints pueden rotar).

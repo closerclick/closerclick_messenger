@@ -2,7 +2,7 @@
 // Mismo patrón que services/identity.js, para evitar duplicación del módulo
 // entre chunks dinámicos.
 
-import { Store } from '@gatoseya/closer-click-store'
+import { Store } from '@closerclick/closer-click-store'
 
 let _instance = null
 let _connectPromise = null

@@ -1,6 +1,6 @@
 // Singleton compartido del Identity vault para toda la app.
 //
-// Importar `Identity` desde `@gatoseya/closer-click-identity` directamente
+// Importar `Identity` desde `@closerclick/closer-click-identity` directamente
 // en varios stores funcionaba mientras Vite los metía en el mismo chunk.
 // `connectionStore` hace `import()` dinámico de `threadsStore` y
 // `contactsStore` (para evitar dependencia circular en setup), lo que
@@ -13,7 +13,7 @@
 // Forzando que TODOS los stores usen este wrapper, el lib se importa una
 // sola vez en este módulo y todos comparten el mismo objeto Identity.
 
-import { Identity } from '@gatoseya/closer-click-identity'
+import { Identity } from '@closerclick/closer-click-identity'
 import { getIdentityBlob, setIdentityBlob, onIdentityBlobChanged } from './identityBridge'
 
 let _instance = null

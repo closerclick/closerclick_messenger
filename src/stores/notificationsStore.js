@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getWebSocketProxyClient } from '@gatoseya/closer-click-proxy-client'
+import { getWebSocketProxyClient } from '@closerclick/closer-click-proxy-client'
 import { getIdentity } from '../services/identity'
 
 const LS_KEY = 'messenger_push_enabled'
