@@ -33,7 +33,7 @@ Step-by-step from "code on disk" to "approved & public listing".
    - For each of `storage`, `offscreen`, `notifications`, `alarms`, `host_permissions`, plus `<all_urls>`: paste the matching paragraph from `PERMISSIONS.md`.
    - "Are you using remote code?" → **No**.
    - "Are you collecting personal/sensitive data?" → **No** (the only PII is the encryption keypair, which never leaves the user's device).
-   - Privacy policy URL: `https://github.com/seyacat/closerclick_messenger_extension/blob/main/PRIVACY.md`.
+   - Privacy policy URL: `https://github.com/closerclick/closerclick_messenger_extension/blob/main/PRIVACY.md`.
 4. **"Distribution"** tab:
    - Visibility: **Public** (or Unlisted if you want to soft-launch).
    - Geographies: all.

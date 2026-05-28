@@ -4,7 +4,7 @@
   "short_name": "CC Messenger",
   "version": "1.9.0",
   "description": "End-to-end encrypted P2P messaging overlay on any page. Shares identity, contacts and threads with the Closer Click ecosystem.",
-  "homepage_url": "https://github.com/seyacat/closerclick_messenger",
+  "homepage_url": "https://github.com/closerclick/closerclick_messenger",
   "author": "seyacat",
   "icons": {
     "16": "icons/icon-192.png",

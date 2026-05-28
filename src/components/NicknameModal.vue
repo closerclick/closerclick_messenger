@@ -52,7 +52,7 @@ onMounted(() => { try { inputEl.value?.focus() } catch (_) {} })
             Generaremos un par de llaves criptográficas (ECDSA + ECDH) en tu navegador.
             Las claves privadas nunca salen de tu dispositivo.
           </p>
-          <a class="link" href="https://github.com/seyacat/closer-click-identity#readme" target="_blank" rel="noopener">
+          <a class="link" href="https://github.com/closerclick/closer-click-identity#readme" target="_blank" rel="noopener">
             ¿Cómo funciona la identidad? →
           </a>
         </div>

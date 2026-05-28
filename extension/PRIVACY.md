@@ -2,7 +2,7 @@
 
 _Last updated: 2026-05-04_
 
-This extension is part of the open-source [Closer Click](https://github.com/seyacat) ecosystem. It provides end-to-end-encrypted peer-to-peer messaging on top of a thin WebSocket relay.
+This extension is part of the open-source [Closer Click](https://github.com/closerclick) ecosystem. It provides end-to-end-encrypted peer-to-peer messaging on top of a thin WebSocket relay.
 
 ## What data the extension handles
 
@@ -17,13 +17,13 @@ This extension is part of the open-source [Closer Click](https://github.com/seya
 
 - **No analytics.** No telemetry, no usage tracking, no third-party SDKs.
 - **No advertising.**
-- **No remote code.** All JavaScript is bundled with the extension and reviewable in the [public repository](https://github.com/seyacat/closerclick_messenger_extension). No `eval`, no remotely loaded scripts.
+- **No remote code.** All JavaScript is bundled with the extension and reviewable in the [public repository](https://github.com/closerclick/closerclick_messenger_extension). No `eval`, no remotely loaded scripts.
 - **No reading the contents of pages you visit.** The overlay is injected as a Shadow-DOM root and does not access the host page's DOM, cookies, or storage.
 - **No selling, sharing, or transferring** of any data to third parties.
 
 ## What the proxy server sees
 
-The relay at `wss://proxy.closer.click` (open source, [seyacat/simple-websocket-proxy](https://github.com/seyacat/simple-websocket-proxy)) sees:
+The relay at `wss://proxy.closer.click` (open source, [closerclick/simple-websocket-proxy](https://github.com/closerclick/simple-websocket-proxy)) sees:
 
 - The **ciphertext** of your messages (it cannot decrypt them).
 - The **public keys** of senders and recipients (this is required to route).
@@ -45,4 +45,4 @@ You can clear all extension data at any time:
 
 ## Contact
 
-Open an issue at [github.com/seyacat/closerclick_messenger_extension/issues](https://github.com/seyacat/closerclick_messenger_extension/issues).
+Open an issue at [github.com/closerclick/closerclick_messenger_extension/issues](https://github.com/closerclick/closerclick_messenger_extension/issues).

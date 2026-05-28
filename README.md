@@ -21,7 +21,7 @@ El eje del ecosistema **[CloserClick](https://closer.click)** es el **autohosteo
 
 ---
 
-App de mensajería P2P del ecosistema [Closer Click](https://github.com/seyacat). Este repo contiene **dos artefactos**:
+App de mensajería P2P del ecosistema [Closer Click](https://github.com/closerclick). Este repo contiene **dos artefactos**:
 
 - **PWA web** (`src/`) — la app principal, deployada a `messenger.closer.click`.
 - **Extensión Chrome** (`extension/`) — shell delgado que reusa la PWA en un iframe; añade overlay sobre cualquier página + service worker que recibe DMs con la pestaña cerrada.
