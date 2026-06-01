@@ -121,7 +121,12 @@ function attachAutoPush (id) {
     if (typeof orig !== 'function') continue
     id[name] = async function (...args) {
       const result = await orig.apply(id, args)
-      bridgePush(id).catch(() => {})
+      // `bridgePush` es void (programa un push con debounce y traga sus
+      // propios errores en `_doPush`). NO devuelve promesa, así que un
+      // `.catch()` aquí reventaba el mutador entero tras una escritura ya
+      // exitosa: el contacto quedaba en el vault pero `addContact` rechazaba,
+      // se saltaba el `refresh()` y la lista no se actualizaba hasta recargar.
+      bridgePush(id)
       return result
     }
   }
