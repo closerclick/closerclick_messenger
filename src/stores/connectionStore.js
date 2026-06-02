@@ -35,7 +35,8 @@ export const useConnectionStore = defineStore('connection', () => {
   // Descubrimiento: baja el directorio y mergea los proxios (∪ con los defaults).
   const loadNodeDirectory = async () => {
     try {
-      const r = await fetch(DIRECTORY_URL, { cache: 'no-cache' })
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000)
+      const r = await fetch(DIRECTORY_URL, { cache: 'no-cache', signal: ctrl.signal }).finally(() => clearTimeout(t))
       if (!r.ok) return
       const dir = await r.json()
       const urls = (dir.proxies || []).map(p => p && p.url).filter(u => typeof u === 'string' && /^wss?:\/\//.test(u))
@@ -45,7 +46,6 @@ export const useConnectionStore = defineStore('connection', () => {
       localStorage.setItem('messenger_proxies', JSON.stringify(merged))
     } catch (_) { /* sin red / CORS → queda el cache/fallback */ }
   }
-  loadNodeDirectory()
   const nickname = ref(sanitizeNickname(localStorage.getItem('messenger_nickname') || ''))
   const nicknameSet = computed(() => nickname.value.trim().length > 0)
 
@@ -79,6 +79,7 @@ export const useConnectionStore = defineStore('connection', () => {
     }
     try {
       connectionError.value = null
+      await ready  // directorio + auto-selección del mejor nodo (si no hay home fijo)
       wsProxyClient.updateConfig({ url: wsUrl.value })
       if (!handlersSetup) { setupHandlers(); handlersSetup = true }
       const assigned = await wsProxyClient.connect()
@@ -165,6 +166,28 @@ export const useConnectionStore = defineStore('connection', () => {
       setTimeout(() => { if (!isConnected.value) connect().catch(() => {}) }, 10000)
     } finally { failingOver = false }
   }
+
+  // Elige el proxio SANO con MENOR latencia (ping a /health). null si ninguno.
+  const pickBestProxy = async () => {
+    const results = await Promise.all(KNOWN_PROXIES.value.map(async (url) => {
+      const start = (performance?.now?.() ?? Date.now())
+      const ok = await healthCheck(url)
+      return { url, ok, ms: (performance?.now?.() ?? Date.now()) - start }
+    }))
+    const healthy = results.filter(r => r.ok).sort((a, b) => a.ms - b.ms)
+    return healthy.length ? healthy[0].url : null
+  }
+
+  // Init coordinado: baja el directorio y, si NO elegiste un home explícito,
+  // auto-selecciona el nodo más rápido (temporal, se re-evalúa cada arranque).
+  // `connect()` espera esto para usar el proxio elegido.
+  const ready = (async () => {
+    await loadNodeDirectory()
+    if (!IS_RELAY_MODE && !localStorage.getItem('messenger_proxy_url')) {
+      const best = await pickBestProxy()
+      if (best) { wsUrl.value = best; console.log('[cc-conn] auto-seleccionado:', best) }
+    }
+  })()
 
   // Overlay: encola en chrome.storage.local para que el offscreen procese.
   // Resto: usa wsProxyClient directo.
