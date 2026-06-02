@@ -21,6 +21,16 @@ const derived = computed(() => contacts.ratingFor(props.pubkey))
 const endorsements = computed(() => peer.value?.endorsements || [])
 const online = computed(() => contacts.isOnline(props.pubkey))
 
+// Reputación del registro COMPARTIDO (reputation.closer.click), ponderada por mi
+// web-of-trust (anti-sybil): el flood de desconocidos no mueve la aguja.
+const cloudRep = ref(null)
+const cloudLoading = ref(true)
+async function loadCloudRep () {
+  cloudLoading.value = true
+  cloudRep.value = await contacts.cloudReputationFor(props.pubkey)
+  cloudLoading.value = false
+}
+
 const setStars = (n) => { myRating.value = n }
 
 const save = async () => {
@@ -41,7 +51,10 @@ const askPeers = () => threads.askRatingsAbout(props.pubkey)
 onMounted(() => {
   contacts.refreshPeers()
   askPeers()
+  loadCloudRep()
 })
+
+const cloudPct = computed(() => cloudRep.value?.score != null ? Math.round(cloudRep.value.score * 100) : null)
 
 const stars = (n) => {
   const v = Math.round(n || 0)
@@ -154,8 +167,29 @@ const shortKey = computed(() => {
           </div>
         </div>
 
+        <!-- Reputación del registro compartido (ponderada por tu web-of-trust) -->
+        <div class="cloud">
+          <div class="cloud-head">
+            <span class="cloud-title">Reputación de la red</span>
+            <button class="refresh" @click="loadCloudRep" title="Refrescar">↻</button>
+          </div>
+          <div v-if="cloudLoading" class="cloud-empty">Consultando…</div>
+          <template v-else-if="cloudRep">
+            <div v-if="cloudRep.score != null" class="cloud-summary">
+              <span class="stars derived">{{ stars(cloudRep.score * 5) }}</span>
+              <span class="wot-num">{{ cloudPct }}%</span>
+              <span class="cloud-count">{{ cloudRep.trustedCount }} de tu red{{ cloudRep.txBoundCount ? ` · ${cloudRep.txBoundCount} con recibo` : '' }}</span>
+            </div>
+            <div v-else-if="cloudRep.rawCount > 0" class="cloud-weak">
+              {{ cloudRep.rawCount }} reseña(s), <strong>ninguna de tu red</strong> — señal débil.
+            </div>
+            <div v-else class="cloud-empty">Sin reputación en el registro todavía.</div>
+          </template>
+          <div v-else class="cloud-empty">Registro no disponible.</div>
+        </div>
+
         <p class="privacy">
-          ⌬ Tu rating se firma con tu clave privada y se comparte automáticamente con peers de confianza.
+          ⌬ Tu rating se firma con tu clave privada, se comparte con peers de confianza y se publica en el registro de reputación.
         </p>
 
         <p v-if="error" class="error">{{ error }}</p>
@@ -327,6 +361,25 @@ const shortKey = computed(() => {
   color: var(--text);
 }
 .wot-count { font-size: 12px; color: var(--muted); }
+
+.cloud {
+  background: var(--bg-3);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 12px;
+}
+.cloud-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.cloud-title {
+  font-size: 12px; font-weight: 600; color: var(--text);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.cloud-summary { display: flex; align-items: center; gap: 8px; }
+.cloud-count { font-size: 12px; color: var(--muted); }
+.cloud-empty { font-size: 13px; color: var(--muted); font-style: italic; }
+.cloud-weak { font-size: 13px; color: var(--muted); }
 
 .endorsements {
   list-style: none;

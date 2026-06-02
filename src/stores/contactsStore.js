@@ -4,6 +4,7 @@ import { useConnectionStore } from './connectionStore'
 import { getIdentity } from '../services/identity'
 import { sanitizeNickname } from '../utils/sanitize'
 import { computeDerivedRating, buildTrustMap } from '../utils/rating'
+import { getReputation } from '../services/reputation'
 
 /**
  * Contacts live in the shared identity vault (id.closer.click) since v0.6.0,
@@ -105,6 +106,13 @@ export const useContactsStore = defineStore('contacts', () => {
     if (!id) throw new Error('Identity vault no disponible')
     await id.setRating(pubkey, rating, notes || '')
     await refresh()
+    // Publicar la atestación firmada al registro compartido (best-effort; no
+    // bloquea la UI). Así tu calificación queda disponible para la red, no solo
+    // local. La reputación se sigue PONDERANDO por tu web-of-trust (anti-sybil).
+    try {
+      const rep = await getReputation()
+      await rep?.client.publishRating({ subject: pubkey, rating, notes: notes || undefined })
+    } catch (e) { console.warn('[reputation] publish falló', e) }
   }
 
   const ratingFor = (pubkey) => {
@@ -113,12 +121,24 @@ export const useContactsStore = defineStore('contacts', () => {
   }
   const myRatingFor = (pubkey) => peerFor(pubkey)?.myRating?.rating ?? null
 
+  // Reputación de la NUBE ponderada por mi web-of-trust (rellena el cold-start
+  // con lo que dice mi red, no solo lo que recibí por el proxy). Async → para
+  // un badge enriquecido. Devuelve null si no hay datos confiables.
+  const cloudReputationFor = async (pubkey) => {
+    if (!pubkey) return null
+    try {
+      const rep = await getReputation()
+      if (!rep) return null
+      return await rep.reputationOf(pubkey)
+    } catch (e) { console.warn('[reputation] lookup falló', e); return null }
+  }
+
   return {
     peers, contacts, ratingTick, onlineMap,
     refresh, refreshPeers,
     addContact, updateContact, removeContact,
     findByPubkey, findByToken, peerFor,
     markOnline, markOffline, isOnline, tokenFor, liveTokenFor,
-    ratePeer, ratingFor, myRatingFor
+    ratePeer, ratingFor, myRatingFor, cloudReputationFor
   }
 })
