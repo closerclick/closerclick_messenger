@@ -122,16 +122,48 @@ export const useConnectionStore = defineStore('connection', () => {
     token.value = null
   }
 
-  // Cambiar de proxio (home): persiste, reconecta y re-identifica. Como los
-  // proxios están federados, seguís alcanzando a contactos en otros nodos.
-  const setProxyUrl = async (url) => {
+  // Cambiar de proxio (home): reconecta y re-identifica. Como los proxios están
+  // federados, seguís alcanzando a contactos en otros nodos. `persist`: guardar
+  // como tu home (selección manual) o solo temporal (failover automático).
+  const setProxyUrl = async (url, { persist = true } = {}) => {
     const u = (url || '').trim()
     if (!/^wss?:\/\//.test(u) || u === wsUrl.value) return
     wsUrl.value = u
-    localStorage.setItem('messenger_proxy_url', u)
+    if (persist) localStorage.setItem('messenger_proxy_url', u)
     if (IS_RELAY_MODE) return
     disconnect()
     await connect()
+  }
+
+  // Health-check de un proxio (HTTP /health del mismo host).
+  const healthCheck = async (wssUrl) => {
+    try {
+      const httpUrl = wssUrl.replace(/^ws/, 'http').replace(/\/+$/, '') + '/health'
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000)
+      const r = await fetch(httpUrl, { signal: ctrl.signal, cache: 'no-store' }).finally(() => clearTimeout(t))
+      return r.ok
+    } catch (_) { return false }
+  }
+
+  // Auto-failover: cuando el client se rinde con el proxio actual, busca otro
+  // sano del directorio y salta (temporal, sin pisar tu home elegido). La
+  // federación garantiza que igual te lleguen los mensajes desde el nuevo nodo.
+  let failingOver = false
+  const attemptFailover = async () => {
+    if (failingOver || IS_RELAY_MODE) return
+    failingOver = true
+    try {
+      for (const url of KNOWN_PROXIES.value.filter(u => u !== wsUrl.value)) {
+        if (await healthCheck(url)) {
+          console.warn('[cc-conn] failover →', url)
+          await setProxyUrl(url, { persist: false })
+          return
+        }
+      }
+      // Ninguno sano: reintentar el actual más tarde (evita loop apretado).
+      console.warn('[cc-conn] sin proxio alternativo sano; reintento en 10s')
+      setTimeout(() => { if (!isConnected.value) connect().catch(() => {}) }, 10000)
+    } finally { failingOver = false }
   }
 
   // Overlay: encola en chrome.storage.local para que el offscreen procese.
@@ -182,6 +214,8 @@ export const useConnectionStore = defineStore('connection', () => {
     wsProxyClient.on('peer_disconnected', (peerToken) => {
       import('./contactsStore.js').then(m => m.useContactsStore().markOffline(peerToken)).catch(() => {})
     })
+    // El client se rindió de reconectar al proxio actual → intentar otro nodo.
+    wsProxyClient.on('reconnect_failed', () => { attemptFailover() })
   }
 
   return {
