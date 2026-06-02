@@ -20,10 +20,32 @@ export const useConnectionStore = defineStore('connection', () => {
   const connectionError = ref(null)
   // Proxios conocidos del ecosistema (federados entre sí). El usuario elige su
   // "home"; la federación entrega los mensajes aunque el contacto esté en otro.
-  // A futuro esto puede venir de un directorio de nodos + round-robin/health-check.
-  const KNOWN_PROXIES = ['wss://proxy.closer.click', 'wss://proxy2.closer.click']
-  const DEFAULT_PROXY = import.meta.env.VITE_WS_URL || KNOWN_PROXIES[0]
+  // La lista se DESCUBRE del directorio de nodos (https://closer.click/nodes.json)
+  // con cache + fallback hardcodeado. Base para round-robin/health-check a futuro.
+  const DEFAULT_PROXIES = ['wss://proxy.closer.click', 'wss://proxy2.closer.click']
+  const DIRECTORY_URL = 'https://closer.click/nodes.json'
+  const loadCachedProxies = () => {
+    try { const c = JSON.parse(localStorage.getItem('messenger_proxies') || 'null'); return Array.isArray(c) && c.length ? c : DEFAULT_PROXIES }
+    catch { return DEFAULT_PROXIES }
+  }
+  const KNOWN_PROXIES = ref(loadCachedProxies())
+  const DEFAULT_PROXY = import.meta.env.VITE_WS_URL || KNOWN_PROXIES.value[0]
   const wsUrl = ref(localStorage.getItem('messenger_proxy_url') || DEFAULT_PROXY)
+
+  // Descubrimiento: baja el directorio y mergea los proxios (∪ con los defaults).
+  const loadNodeDirectory = async () => {
+    try {
+      const r = await fetch(DIRECTORY_URL, { cache: 'no-cache' })
+      if (!r.ok) return
+      const dir = await r.json()
+      const urls = (dir.proxies || []).map(p => p && p.url).filter(u => typeof u === 'string' && /^wss?:\/\//.test(u))
+      if (!urls.length) return
+      const merged = Array.from(new Set([...urls, ...DEFAULT_PROXIES]))
+      KNOWN_PROXIES.value = merged
+      localStorage.setItem('messenger_proxies', JSON.stringify(merged))
+    } catch (_) { /* sin red / CORS → queda el cache/fallback */ }
+  }
+  loadNodeDirectory()
   const nickname = ref(sanitizeNickname(localStorage.getItem('messenger_nickname') || ''))
   const nicknameSet = computed(() => nickname.value.trim().length > 0)
 
