@@ -11,11 +11,13 @@ const threads = useThreadsStore()
 
 const contact = computed(() => contacts.findByPubkey(props.pubkey))
 const peer = computed(() => contacts.peerFor(props.pubkey))
-const myRating = ref(contacts.myRatingFor(props.pubkey) || 0)
+const myRating = ref(contacts.myRatingFor(props.pubkey) || 0)   // confianza
+const myAfinidad = ref(0)                                       // me interesa/sigo/conozco
 const notes = ref(peer.value?.myRating?.notes || '')
 const error = ref('')
 const saving = ref(false)
 const hover = ref(0)
+const hoverAfin = ref(0)
 
 const derived = computed(() => contacts.ratingFor(props.pubkey))
 const endorsements = computed(() => peer.value?.endorsements || [])
@@ -32,12 +34,15 @@ async function loadCloudRep () {
 }
 
 const setStars = (n) => { myRating.value = n }
+const setAfin = (n) => { myAfinidad.value = n }
 
 const save = async () => {
   error.value = ''
   saving.value = true
   try {
-    await contacts.ratePeer(props.pubkey, myRating.value, notes.value)
+    const indicators = { confianza: myRating.value }
+    if (myAfinidad.value > 0) indicators.afinidad = myAfinidad.value
+    await contacts.ratePeer(props.pubkey, indicators, notes.value)
     emit('close')
   } catch (e) {
     error.value = e.message || 'Error al guardar'
@@ -48,10 +53,13 @@ const save = async () => {
 
 const askPeers = () => threads.askRatingsAbout(props.pubkey)
 
-onMounted(() => {
+onMounted(async () => {
   contacts.refreshPeers()
   askPeers()
   loadCloudRep()
+  // Precargar mi afinidad existente (desde mi atestación en el registro).
+  const mine = await contacts.myIndicatorsFor(props.pubkey)
+  if (typeof mine.afinidad === 'number') myAfinidad.value = mine.afinidad
 })
 
 const cloudPct = computed(() => cloudRep.value?.score != null ? Math.round(cloudRep.value.score * 100) : null)
@@ -109,9 +117,9 @@ const shortKey = computed(() => {
           </div>
         </div>
 
-        <!-- Tu rating -->
+        <!-- Confianza -->
         <div class="section">
-          <span class="section-label">Tu calificación</span>
+          <span class="section-label">Confianza <small>(¿qué tan confiable/íntegro es?)</small></span>
           <div class="stars-row" @mouseleave="hover = 0">
             <button
               v-for="n in 5"
@@ -127,6 +135,26 @@ const shortKey = computed(() => {
             <span class="rating-num">{{ hover || myRating || 0 }} / 5</span>
             <span v-if="ratingLabel" class="rating-label">— {{ ratingLabel }}</span>
             <button v-if="myRating > 0 && !hover" class="clear" @click="setStars(0)">Quitar</button>
+          </div>
+        </div>
+
+        <!-- Afinidad -->
+        <div class="section">
+          <span class="section-label">Afinidad <small>(me interesa / sigo / conozco)</small></span>
+          <div class="stars-row" @mouseleave="hoverAfin = 0">
+            <button
+              v-for="n in 5"
+              :key="n"
+              type="button"
+              class="star-btn afin"
+              :class="{ filled: n <= (hoverAfin || myAfinidad) }"
+              @click="setAfin(n)"
+              @mouseenter="hoverAfin = n"
+            >★</button>
+          </div>
+          <div class="rating-meta">
+            <span class="rating-num">{{ hoverAfin || myAfinidad || 0 }} / 5</span>
+            <button v-if="myAfinidad > 0 && !hoverAfin" class="clear" @click="setAfin(0)">Quitar</button>
           </div>
         </div>
 
@@ -176,14 +204,21 @@ const shortKey = computed(() => {
           <div v-if="cloudLoading" class="cloud-empty">Consultando…</div>
           <template v-else-if="cloudRep">
             <div v-if="cloudRep.score != null" class="cloud-summary">
+              <span class="cloud-ind">Confianza</span>
               <span class="stars derived">{{ stars(cloudRep.score * 5) }}</span>
               <span class="wot-num">{{ cloudPct }}%</span>
               <span class="cloud-count">{{ cloudRep.trustedCount }} de tu red{{ cloudRep.txBoundCount ? ` · ${cloudRep.txBoundCount} con recibo` : '' }}</span>
             </div>
-            <div v-else-if="cloudRep.rawCount > 0" class="cloud-weak">
+            <div v-if="cloudRep.indicators && cloudRep.indicators.afinidad && cloudRep.indicators.afinidad.score != null" class="cloud-summary">
+              <span class="cloud-ind">Afinidad</span>
+              <span class="stars derived afin">{{ stars(cloudRep.indicators.afinidad.score * 5) }}</span>
+              <span class="wot-num">{{ Math.round(cloudRep.indicators.afinidad.score * 100) }}%</span>
+              <span class="cloud-count">{{ cloudRep.indicators.afinidad.trustedCount }} de tu red</span>
+            </div>
+            <div v-if="cloudRep.score == null && cloudRep.rawCount > 0" class="cloud-weak">
               {{ cloudRep.rawCount }} reseña(s), <strong>ninguna de tu red</strong> — señal débil.
             </div>
-            <div v-else class="cloud-empty">Sin reputación en el registro todavía.</div>
+            <div v-else-if="cloudRep.score == null && cloudRep.rawCount === 0" class="cloud-empty">Sin reputación en el registro todavía.</div>
           </template>
           <div v-else class="cloud-empty">Registro no disponible.</div>
         </div>
@@ -289,6 +324,9 @@ const shortKey = computed(() => {
   transition: color 100ms ease-out, transform 100ms ease-out;
 }
 .star-btn:hover { transform: scale(1.1); }
+.star-btn.afin.filled { color: var(--accent, #2dd4bf); }
+.cloud-ind { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); min-width: 64px; }
+.stars.afin { color: var(--accent, #2dd4bf); }
 .star-btn.filled { color: var(--gold); text-shadow: 0 1px 2px rgba(212, 167, 44, 0.35); }
 
 .rating-meta {

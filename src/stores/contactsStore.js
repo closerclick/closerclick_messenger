@@ -101,18 +101,34 @@ export const useContactsStore = defineStore('contacts', () => {
 
   // ---- Rating -------------------------------------------------------------
 
-  const ratePeer = async (pubkey, rating, notes) => {
+  // `valueOrIndicators`: número (= confianza) o mapa { confianza, afinidad, ... }.
+  // La confianza se guarda en el vault local (web-of-trust); el mapa completo se
+  // atesta firmado en el registro. La reputación se pondera por confianza (anti-sybil).
+  const ratePeer = async (pubkey, valueOrIndicators, notes) => {
     const id = await getIdentity()
     if (!id) throw new Error('Identity vault no disponible')
-    await id.setRating(pubkey, rating, notes || '')
+    const indicators = typeof valueOrIndicators === 'number'
+      ? { confianza: valueOrIndicators }
+      : (valueOrIndicators || {})
+    if (typeof indicators.confianza === 'number') await id.setRating(pubkey, indicators.confianza, notes || '')
     await refresh()
-    // Publicar la atestación firmada al registro compartido (best-effort; no
-    // bloquea la UI). Así tu calificación queda disponible para la red, no solo
-    // local. La reputación se sigue PONDERANDO por tu web-of-trust (anti-sybil).
     try {
       const rep = await getReputation()
-      await rep?.client.publishRating({ subject: pubkey, rating, notes: notes || undefined })
+      await rep?.client.publishRating({ subject: pubkey, indicators, notes: notes || undefined })
     } catch (e) { console.warn('[reputation] publish falló', e) }
+  }
+
+  // Mis propios indicadores hacia un peer (desde mi atestación en el registro),
+  // p.ej. para precargar el control de afinidad. {} si no tengo atestación.
+  const myIndicatorsFor = async (pubkey) => {
+    try {
+      const rep = await getReputation()
+      if (!rep) return {}
+      const me = connection.myPublickey
+      const { attestations } = await rep.getRatings(pubkey)
+      const mine = attestations.find(a => a.issuer === me)
+      return (mine && mine.indicators) || {}
+    } catch (_) { return {} }
   }
 
   const ratingFor = (pubkey) => {
@@ -139,6 +155,6 @@ export const useContactsStore = defineStore('contacts', () => {
     addContact, updateContact, removeContact,
     findByPubkey, findByToken, peerFor,
     markOnline, markOffline, isOnline, tokenFor, liveTokenFor,
-    ratePeer, ratingFor, myRatingFor, cloudReputationFor
+    ratePeer, ratingFor, myRatingFor, cloudReputationFor, myIndicatorsFor
   }
 })
