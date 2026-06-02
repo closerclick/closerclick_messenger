@@ -146,37 +146,57 @@ export const useConnectionStore = defineStore('connection', () => {
     } catch (_) { return false }
   }
 
-  // Auto-failover: cuando el client se rinde con el proxio actual, busca otro
-  // sano del directorio y salta (temporal, sin pisar tu home elegido). La
-  // federación garantiza que igual te lleguen los mensajes desde el nuevo nodo.
+  // --- Reputación LOCAL de nodos (automática, SIN prompts al usuario) ---
+  // El cliente recuerda por nodo su latencia y los fallos recientes (failover
+  // desde él). La selección/failover prefiere los confiables y evita los que
+  // fallaron recién (con decaimiento). Todo derivado del comportamiento medido;
+  // el usuario no califica nada. (Evolución: compartir atestaciones firmadas vía
+  // el registro de reputación, ponderadas por web-of-trust.)
+  const NODE_STATS_KEY = 'messenger_node_stats'
+  const FAIL_WINDOW_MS = 30 * 60 * 1000
+  let nodeStats = (() => { try { return JSON.parse(localStorage.getItem(NODE_STATS_KEY) || '{}') } catch { return {} } })()
+  const saveStats = () => { try { localStorage.setItem(NODE_STATS_KEY, JSON.stringify(nodeStats)) } catch (_) {} }
+  const recordFail = (url) => { const s = nodeStats[url] || {}; s.failCount = (s.failCount || 0) + 1; s.lastFailTs = Date.now(); nodeStats[url] = s; saveStats() }
+  const recordOk = (url) => { const s = nodeStats[url]; if (s && s.failCount) { s.failCount = 0; delete s.lastFailTs; saveStats() } }
+  const penalty = (url) => {
+    const s = nodeStats[url]
+    if (!s || !s.lastFailTs) return 0
+    const age = Date.now() - s.lastFailTs
+    if (age >= FAIL_WINDOW_MS) return 0
+    return (5000 + (s.failCount || 1) * 5000) * (1 - age / FAIL_WINDOW_MS) // ms-equivalente, decae
+  }
+
+  // Pinguea una lista y devuelve los SANOS ordenados por score (latencia +
+  // penalización por fallo reciente). Registra la latencia medida.
+  const rankHealthy = async (urls) => {
+    const res = await Promise.all(urls.map(async (url) => {
+      const start = (performance?.now?.() ?? Date.now())
+      const ok = await healthCheck(url)
+      const ms = (performance?.now?.() ?? Date.now()) - start
+      if (ok) { const s = nodeStats[url] || {}; s.latencyMs = Math.round(ms); nodeStats[url] = s }
+      return { url, ok, ms }
+    }))
+    saveStats()
+    return res.filter(r => r.ok).sort((a, b) => (a.ms + penalty(a.url)) - (b.ms + penalty(b.url))).map(r => r.url)
+  }
+
+  // Auto-failover: el proxio actual nos falló → lo penalizamos y saltamos al
+  // mejor nodo sano (reputación local + latencia), temporal.
   let failingOver = false
   const attemptFailover = async () => {
     if (failingOver || IS_RELAY_MODE) return
     failingOver = true
     try {
-      for (const url of KNOWN_PROXIES.value.filter(u => u !== wsUrl.value)) {
-        if (await healthCheck(url)) {
-          console.warn('[cc-conn] failover →', url)
-          await setProxyUrl(url, { persist: false })
-          return
-        }
-      }
-      // Ninguno sano: reintentar el actual más tarde (evita loop apretado).
+      recordFail(wsUrl.value)
+      const ranked = await rankHealthy(KNOWN_PROXIES.value.filter(u => u !== wsUrl.value))
+      if (ranked.length) { console.warn('[cc-conn] failover →', ranked[0]); await setProxyUrl(ranked[0], { persist: false }); return }
       console.warn('[cc-conn] sin proxio alternativo sano; reintento en 10s')
       setTimeout(() => { if (!isConnected.value) connect().catch(() => {}) }, 10000)
     } finally { failingOver = false }
   }
 
-  // Elige el proxio SANO con MENOR latencia (ping a /health). null si ninguno.
-  const pickBestProxy = async () => {
-    const results = await Promise.all(KNOWN_PROXIES.value.map(async (url) => {
-      const start = (performance?.now?.() ?? Date.now())
-      const ok = await healthCheck(url)
-      return { url, ok, ms: (performance?.now?.() ?? Date.now()) - start }
-    }))
-    const healthy = results.filter(r => r.ok).sort((a, b) => a.ms - b.ms)
-    return healthy.length ? healthy[0].url : null
-  }
+  // Elige el mejor proxio (reputación local + latencia). null si ninguno sano.
+  const pickBestProxy = async () => { const ranked = await rankHealthy(KNOWN_PROXIES.value); return ranked[0] || null }
 
   // Init coordinado: baja el directorio y, si NO elegiste un home explícito,
   // auto-selecciona el nodo más rápido (temporal, se re-evalúa cada arranque).
@@ -222,6 +242,7 @@ export const useConnectionStore = defineStore('connection', () => {
     wsProxyClient.on('connect', () => {
       isConnected.value = true
       connectionError.value = null
+      recordOk(wsUrl.value)  // el nodo respondió → limpiar su penalización
       // Re-procesar items deferidos en la cola al (re)conectar.
       if (queueWatcher) queueWatcher.drain().catch(() => {})
     })
