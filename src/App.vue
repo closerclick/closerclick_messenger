@@ -5,6 +5,7 @@ import { useContactsStore } from './stores/contactsStore'
 import { useThreadsStore } from './stores/threadsStore'
 import NicknameModal from './components/NicknameModal.vue'
 import ContactList from './components/ContactList.vue'
+import RequestsInbox from './components/RequestsInbox.vue'
 import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
@@ -246,6 +247,7 @@ const openMessengerTab = () => {
           <h3>Contactos</h3>
           <button class="add-btn" @click="showAdd = true" title="Añadir contacto">+</button>
         </div>
+        <RequestsInbox />
         <ContactList @select="onSelectContact" @rate="openRating" />
       </aside>
 

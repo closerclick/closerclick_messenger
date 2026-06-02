@@ -2,10 +2,29 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useConnectionStore } from './connectionStore'
 import { useContactsStore } from './contactsStore'
+import { useRequestsStore } from './requestsStore'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
+import { getReputation } from '../services/reputation'
 import { sanitizeMessage } from '../utils/sanitize'
 import { pushThreadsToBridge, pullThreadsFromBridge, onThreadsChanged } from '../services/threadsBridge'
+
+// Peers que nos saludaron (HELLO) pero NO son contactos: guardamos su
+// encryptionPubkey para poder descifrar su DM y rutearlo a Solicitudes. En
+// memoria, esta sesión (las solicitudes durables viven en requestsStore).
+const pendingPeers = new Map()    // pubkey -> { encryptionPubkey, token, nickname }
+const pendingByToken = new Map()  // token  -> pubkey
+
+// "Avalado por tu red": alguien en quien confiás (directo/transitivo) tiene una
+// atestación sobre este pubkey. Si sí → la solicitud notifica; si no → silenciosa.
+async function isVouched (pubkey) {
+  try {
+    const rep = await getReputation()
+    if (!rep) return false
+    const r = await rep.reputationOf(pubkey)
+    return (r?.trustedCount || 0) > 0
+  } catch (_) { return false }
+}
 
 const URL_EMBED = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('embed')
 const IS_OVERLAY_EMBED = URL_EMBED === 'overlay'
@@ -41,6 +60,7 @@ const saveLocalCache = (data) => {
 export const useThreadsStore = defineStore('threads', () => {
   const connection = useConnectionStore()
   const contacts = useContactsStore()
+  const requests = useRequestsStore()
 
   const threads = ref(loadLocalCache())   // hidratación inmediata desde cache local
   const ACTIVE_KEY = 'messenger_active_pubkey_v1'
@@ -312,12 +332,16 @@ export const useThreadsStore = defineStore('threads', () => {
       flushOutbox()
       sendHello(fromToken)
     } else {
-      await contacts.addContact({
-        pubkey: payload.pubkey,
-        nickname: payload.nickname || payload.pubkey.slice(0, 8),
+      // Desconocido: NO se auto-agrega al vault. Guardamos su encryptionPubkey
+      // en memoria para poder descifrar su DM y rutearlo a Solicitudes. Le
+      // mandamos HELLO de vuelta (nuestra enc) para que pueda escribirnos —
+      // pero su mensaje irá a la bandeja, no a contactos.
+      pendingPeers.set(payload.pubkey, {
+        encryptionPubkey: payload.encryptionPubkey || null,
         token: fromToken,
-        encryptionPubkey: payload.encryptionPubkey || null
+        nickname: payload.nickname || ''
       })
+      if (fromToken) pendingByToken.set(fromToken, payload.pubkey)
       contacts.markOnline(payload.pubkey, fromToken)
       sendHello(fromToken)
     }
@@ -374,8 +398,18 @@ export const useThreadsStore = defineStore('threads', () => {
         if (c?.encryptionPubkey) break
       }
     }
-    const senderEnc = c?.encryptionPubkey
-    if (!c || !senderEnc) {
+    // Resolver pubkey + encryptionPubkey: de un contacto, o de un peer pendiente
+    // (HELLO recibido pero sin agregar). Los desconocidos NO se descartan: se
+    // descifran y van a Solicitudes.
+    const isContact = !!(c && c.encryptionPubkey)
+    const senderPubkey = c?.publickey || meta.fromPubkey || pendingByToken.get(fromToken) || null
+    let senderEnc = c?.encryptionPubkey || null
+    let senderNick = c?.nickname || ''
+    if (!isContact && senderPubkey) {
+      const pend = pendingPeers.get(senderPubkey)
+      if (pend?.encryptionPubkey) { senderEnc = pend.encryptionPubkey; senderNick = pend.nickname || senderNick }
+    }
+    if (!senderPubkey || !senderEnc) {
       console.warn('DM from unknown peer', fromToken, meta.fromPubkey || '', '— dropping until handshake')
       return
     }
@@ -396,51 +430,58 @@ export const useThreadsStore = defineStore('threads', () => {
       // El vault devuelve { plaintext }, no un string directo.
       const text = result?.plaintext ?? ''
       const cleanText = sanitizeMessage(text)
-      const entry = {
-        id: payload.mid || crypto.randomUUID(),
-        dir: 'in',
-        text: cleanText,
-        ts: payload.ts || Date.now(),
-        queued: !!meta.queued,
-        queuedAt: meta.queuedAt || null
-      }
-      append(c.publickey, entry)
+      const mid = payload.mid || crypto.randomUUID()
+      const ts = payload.ts || Date.now()
 
-      // Notifica a la UI para mostrar la notificación centrada (App.vue
-      // observa `lastIncomingDM` y aplica el fade in/out + mark-as-displayed).
-      lastIncomingDM.value = {
-        id: entry.id,
-        fromPubkey: c.publickey,
-        fromNickname: c.nickname || c.publickey.slice(0, 8),
-        text: cleanText,
-        ts: entry.ts
-      }
+      if (!isContact) {
+        // Desconocido → bandeja de Solicitudes. Notifica SOLO si está avalado por
+        // tu red (alguien en quien confiás tiene una atestación sobre él); si no,
+        // queda en silencio y se purga a las 24h.
+        const vouched = await isVouched(senderPubkey)
+        requests.upsert({ pubkey: senderPubkey, nickname: senderNick, encryptionPubkey: senderEnc, token: fromToken, text: cleanText, ts, vouched })
+        if (vouched) {
+          lastIncomingDM.value = { id: mid, fromPubkey: senderPubkey, fromNickname: senderNick || senderPubkey.slice(0, 8), text: cleanText, ts, request: true }
+        }
+      } else {
+        const entry = { id: mid, dir: 'in', text: cleanText, ts, queued: !!meta.queued, queuedAt: meta.queuedAt || null }
+        append(senderPubkey, entry)
 
-      // Si el PWA está embebido (extensión / future apps), notifica al parent
-      // para que pueda disparar toast/notificación nativa.
-      if (window !== window.parent) {
-        try {
-          window.parent.postMessage({
-            source: 'cc-messenger',
-            type: 'dm-arrived',
-            dm: {
-              id: entry.id,
-              fromPubkey: c.publickey,
-              fromNickname: c.nickname || c.publickey.slice(0, 8),
-              text: cleanText,
-              ts: entry.ts,
-              queued: entry.queued
-            }
-          }, '*')
-        } catch (_) {}
+        // Notifica a la UI para mostrar la notificación centrada (App.vue
+        // observa `lastIncomingDM` y aplica el fade in/out + mark-as-displayed).
+        lastIncomingDM.value = {
+          id: mid,
+          fromPubkey: senderPubkey,
+          fromNickname: senderNick || senderPubkey.slice(0, 8),
+          text: cleanText,
+          ts
+        }
+
+        // Si el PWA está embebido (extensión / future apps), notifica al parent
+        // para que pueda disparar toast/notificación nativa.
+        if (window !== window.parent) {
+          try {
+            window.parent.postMessage({
+              source: 'cc-messenger',
+              type: 'dm-arrived',
+              dm: {
+                id: mid,
+                fromPubkey: senderPubkey,
+                fromNickname: senderNick || senderPubkey.slice(0, 8),
+                text: cleanText,
+                ts,
+                queued: !!meta.queued
+              }
+            }, '*')
+          } catch (_) {}
+        }
       }
       // Optional ack — si conocemos token actual, lo mandamos por token;
       // si no, por pubkey (el ack también puede irse offline).
       if (payload.mid) {
         const ack = formatMessage('DM_ACK', { id: payload.mid })
-        const tk = contacts.tokenFor(c.publickey)
+        const tk = contacts.tokenFor(senderPubkey) || fromToken
         if (tk) await connection.sendMessage([tk], ack)
-        else    await connection.sendByPubkey([c.publickey], ack)
+        else    await connection.sendByPubkey([senderPubkey], ack)
       }
     } catch (e) { console.warn('decrypt failed:', e) }
   }
@@ -533,10 +574,35 @@ export const useThreadsStore = defineStore('threads', () => {
     })
   })()
 
+  // ---- Solicitudes (bandeja de desconocidos) -----------------------------
+
+  // Aceptar una solicitud: promueve al peer a contacto (recién ahí entra al
+  // vault), inyecta su primer mensaje al hilo y la quita de la bandeja.
+  const acceptRequest = async (pubkey) => {
+    const r = requests.get(pubkey)
+    if (!r) return
+    await contacts.addContact({
+      pubkey,
+      nickname: r.nickname || pubkey.slice(0, 8),
+      token: r.token,
+      encryptionPubkey: r.encryptionPubkey
+    })
+    if (r.text) await append(pubkey, { id: crypto.randomUUID(), dir: 'in', text: r.text, ts: r.ts })
+    pendingPeers.delete(pubkey)
+    requests.remove(pubkey)
+    await contacts.refresh()
+  }
+
+  const dismissRequest = (pubkey) => {
+    pendingPeers.delete(pubkey)
+    requests.remove(pubkey)
+  }
+
   return {
     threads, activePubkey, activeThread, activeContact, outbox, lastIncomingDM,
     setActive, sendDM, flushOutbox,
     handleIncoming, sendHello, sendHelloByPubkey, tryHandshake,
-    askRatingsAbout, load
+    askRatingsAbout, load,
+    requests, acceptRequest, dismissRequest
   }
 })
