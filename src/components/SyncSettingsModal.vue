@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
 import { useNotificationsStore } from '../stores/notificationsStore'
+import { useConnectionStore } from '../stores/connectionStore'
 
 const emit = defineEmits(['close'])
 
@@ -11,6 +12,19 @@ async function toggleNotifications () {
   if (notif.enabled) await notif.disable()
   else await notif.enable()
 }
+
+// Selector de proxio (home). Los proxios están federados → cambiar de nodo no
+// te aísla: seguís alcanzando contactos en otros proxios.
+const conn = useConnectionStore()
+const customProxy = ref('')
+async function pickProxy (url) { await conn.setProxyUrl(url) }
+async function addCustomProxy () {
+  const u = customProxy.value.trim()
+  if (!u) return
+  await conn.setProxyUrl(u.startsWith('ws') ? u : 'wss://' + u)
+  customProxy.value = ''
+}
+const shortProxy = (u) => u.replace(/^wss?:\/\//, '')
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || ''
 
@@ -206,6 +220,39 @@ function vaultStatus (s) {
             <button class="btn secondary" :disabled="busy" @click="lock">Bloquear</button>
             <button class="btn secondary" :disabled="busy" @click="disconnectGoogle">Cerrar sesión</button>
             <button class="btn" :disabled="busy" @click="syncNow">Actualizar ahora</button>
+          </div>
+        </div>
+
+        <!-- Servidor (proxio / home) -->
+        <div class="notif-section">
+          <div class="notif-head">
+            <div>
+              <div class="notif-title">Servidor (proxio)</div>
+              <div class="notif-sub">
+                Tu nodo de transporte. Los proxios están <strong>federados</strong>:
+                cambiar de nodo no te aísla — seguís alcanzando contactos en otros.
+              </div>
+            </div>
+            <span :class="['conn-dot', { on: conn.isConnected }]" :title="conn.isConnected ? 'conectado' : 'desconectado'"></span>
+          </div>
+          <div class="proxy-list">
+            <button
+              v-for="p in conn.KNOWN_PROXIES" :key="p"
+              :class="['proxy-opt', { on: conn.wsUrl === p }]"
+              @click="pickProxy(p)"
+            >
+              <span class="proxy-radio"></span>{{ shortProxy(p) }}
+            </button>
+            <button
+              v-if="!conn.KNOWN_PROXIES.includes(conn.wsUrl)"
+              :class="['proxy-opt', 'on']"
+            >
+              <span class="proxy-radio"></span>{{ shortProxy(conn.wsUrl) }} <small>(custom)</small>
+            </button>
+          </div>
+          <div class="proxy-custom">
+            <input v-model="customProxy" placeholder="otro proxio: proxy.tudominio.com" @keyup.enter="addCustomProxy" />
+            <button class="btn" @click="addCustomProxy">Usar</button>
           </div>
         </div>
 
@@ -435,6 +482,21 @@ function vaultStatus (s) {
 .toggle.on { background: var(--online, #2e9e5b); border-color: var(--online, #2e9e5b); }
 .toggle.on .knob { transform: translateX(18px); }
 .toggle:disabled { opacity: .5; cursor: not-allowed; }
+
+.conn-dot { width: 10px; height: 10px; border-radius: 50%; background: #777; flex: none; }
+.conn-dot.on { background: var(--online, #2e9e5b); }
+.proxy-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.proxy-opt {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  background: var(--bg-3, #1b2536); border: 1px solid var(--line, #2a3550); color: var(--text, #e7edf6);
+}
+.proxy-opt .proxy-radio { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line, #55617a); flex: none; }
+.proxy-opt.on { border-color: var(--accent, #2dd4bf); }
+.proxy-opt.on .proxy-radio { border-color: var(--accent, #2dd4bf); background: var(--accent, #2dd4bf); }
+.proxy-opt small { color: var(--muted, #8aa0bd); }
+.proxy-custom { display: flex; gap: 6px; margin-top: 8px; }
+.proxy-custom input { flex: 1; min-width: 0; }
 
 .foot {
   padding: 14px 24px;

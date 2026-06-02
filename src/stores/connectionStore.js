@@ -18,7 +18,12 @@ export const useConnectionStore = defineStore('connection', () => {
   const token = ref(null)
   const isConnected = ref(false)
   const connectionError = ref(null)
-  const wsUrl = ref(import.meta.env.VITE_WS_URL || 'wss://proxy.closer.click')
+  // Proxios conocidos del ecosistema (federados entre sí). El usuario elige su
+  // "home"; la federación entrega los mensajes aunque el contacto esté en otro.
+  // A futuro esto puede venir de un directorio de nodos + round-robin/health-check.
+  const KNOWN_PROXIES = ['wss://proxy.closer.click', 'wss://proxy2.closer.click']
+  const DEFAULT_PROXY = import.meta.env.VITE_WS_URL || KNOWN_PROXIES[0]
+  const wsUrl = ref(localStorage.getItem('messenger_proxy_url') || DEFAULT_PROXY)
   const nickname = ref(sanitizeNickname(localStorage.getItem('messenger_nickname') || ''))
   const nicknameSet = computed(() => nickname.value.trim().length > 0)
 
@@ -95,6 +100,18 @@ export const useConnectionStore = defineStore('connection', () => {
     token.value = null
   }
 
+  // Cambiar de proxio (home): persiste, reconecta y re-identifica. Como los
+  // proxios están federados, seguís alcanzando a contactos en otros nodos.
+  const setProxyUrl = async (url) => {
+    const u = (url || '').trim()
+    if (!/^wss?:\/\//.test(u) || u === wsUrl.value) return
+    wsUrl.value = u
+    localStorage.setItem('messenger_proxy_url', u)
+    if (IS_RELAY_MODE) return
+    disconnect()
+    await connect()
+  }
+
   // Overlay: encola en chrome.storage.local para que el offscreen procese.
   // Resto: usa wsProxyClient directo.
   const sendMessage = IS_RELAY_MODE
@@ -149,6 +166,7 @@ export const useConnectionStore = defineStore('connection', () => {
     token, isConnected, connectionError, wsUrl, nickname, nicknameSet, presenceChannel,
     myPublickey, queuedDelivered,
     connect, disconnect, sendMessage, sendByPubkey, setNickname, setPresenceChannel, wsProxyClient,
+    KNOWN_PROXIES, setProxyUrl,
     identifyWithVault
   }
 })
