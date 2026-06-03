@@ -16,6 +16,45 @@ let _nextId = 1
 const _pending = new Map()
 let _wired = false
 
+// Disponibilidad del bridge: solo existe un host (`identity-bridge-host.js`)
+// cuando el messenger corre DENTRO de la extensión (overlay/popup/offscreen) o
+// cuando el content script de la extensión lo inyecta en messenger.closer.click.
+// Como PWA standalone sin la extensión NO hay host: sin esta sonda cada `call`
+// esperaba 3s a un timeout (y spameaba la consola) en cada arranque. Sondeamos
+// una vez con un timeout corto y cacheamos el resultado; si no hay host, todas
+// las ops se cortan de inmediato devolviendo su default.
+let _available = null  // Promise<boolean> | null
+const PROBE_TIMEOUT_MS = 800
+
+function probeBridge () {
+  ensureWired()
+  const target = window.parent !== window ? window.parent : window
+  return new Promise((resolve) => {
+    const id = _nextId++
+    const timer = setTimeout(() => { _pending.delete(id); resolve(false) }, PROBE_TIMEOUT_MS)
+    // Cualquier respuesta del host (resultado o error) prueba que existe.
+    const seen = () => { clearTimeout(timer); resolve(true) }
+    _pending.set(id, { resolve: seen, reject: seen, timer })
+    try {
+      target.postMessage({ source: 'cc-id-bridge', type: 'request', id, op: 'get' }, '*')
+    } catch { _pending.delete(id); clearTimeout(timer); resolve(false) }
+  })
+}
+
+/** True si hay un host del bridge respondiendo (extensión presente). Cacheado. */
+export function bridgeAvailable () {
+  if (!_available) _available = probeBridge()
+  return _available
+}
+
+// chrome.storage serializa con JSON, así que pasamos un clon JSON-safe: elimina
+// Proxies reactivos de Vue, funciones y demás valores no estructurables-clonables
+// que rompían `postMessage` con "could not be cloned".
+function jsonSafe (v) {
+  if (v == null || typeof v !== 'object') return v
+  try { return JSON.parse(JSON.stringify(v)) } catch { return v }
+}
+
 function ensureWired () {
   if (_wired) return
   _wired = true
@@ -60,13 +99,15 @@ function call (op, payload = {}) {
 
 /** Lee el blob de identidad del bridge. Devuelve null si no hay o no hay parent. */
 export async function getIdentityBlob () {
+  if (!(await bridgeAvailable())) return null
   try { return await call('get') }
   catch (e) { console.warn('[cc-id-bridge] get failed:', e.message); return null }
 }
 
 /** Guarda el blob de identidad (snapshot completo) al bridge. */
 export async function setIdentityBlob (blob) {
-  try { await call('set', { blob }); return true }
+  if (!(await bridgeAvailable())) return false
+  try { await call('set', { blob: jsonSafe(blob) }); return true }
   catch (e) { console.warn('[cc-id-bridge] set failed:', e.message); return false }
 }
 
@@ -85,17 +126,20 @@ export function onIdentityBlobChanged (handler) {
 // Las claves deben prefijarse con `cc-` (validado en el host).
 
 export async function kvGet (key) {
+  if (!(await bridgeAvailable())) return null
   try { return await call('kv-get', { key }) }
   catch (e) { console.warn('[cc-id-bridge] kv-get failed:', e.message); return null }
 }
 
 export async function kvSet (key, value) {
-  try { return await call('kv-set', { key, value }) }
+  if (!(await bridgeAvailable())) return null
+  try { return await call('kv-set', { key, value: jsonSafe(value) }) }
   catch (e) { console.warn('[cc-id-bridge] kv-set failed:', e.message); return null }
 }
 
 export async function kvAppendArray (key, item) {
-  try { return await call('kv-append-array', { key, item }) }
+  if (!(await bridgeAvailable())) return null
+  try { return await call('kv-append-array', { key, item: jsonSafe(item) }) }
   catch (e) { console.warn('[cc-id-bridge] kv-append failed:', e.message); return null }
 }
 
