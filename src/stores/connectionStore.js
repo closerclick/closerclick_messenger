@@ -250,6 +250,14 @@ export const useConnectionStore = defineStore('connection', () => {
       recordOk(wsUrl.value)  // el nodo respondió → limpiar su penalización
       // Re-procesar items deferidos en la cola al (re)conectar.
       if (queueWatcher) queueWatcher.drain().catch(() => {})
+      // Al (RE)conectar: (1) re-identificarse —activa la cola offline propia y la
+      // reachability por pubkey; sin esto, tras un blip de WS dejabas de recibir—;
+      // (2) reenviar el outbox: DMs que fallaron con el WS caído. Para un destinatario
+      // offline, flushOutbox sale por pubkey → cola offline del proxy. Sin este flush,
+      // un envío hecho con el WS caído quedaba atascado hasta que el peer mandara un
+      // HELLO (requería ambos online a la vez), nunca llegaba a la cola offline.
+      identifyWithVault().catch(e => console.warn('identify on (re)connect:', e))
+      import('./threadsStore.js').then(m => m.useThreadsStore().flushOutbox()).catch(() => {})
     })
     wsProxyClient.on('disconnect', () => { isConnected.value = false; token.value = null })
     wsProxyClient.on('error', (err) => {
