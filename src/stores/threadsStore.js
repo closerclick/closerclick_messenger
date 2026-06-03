@@ -283,6 +283,19 @@ export const useThreadsStore = defineStore('threads', () => {
     }
   }
 
+  // Manda un IDENTIFY_CHALLENGE a un token cuyo pubkey aún no conocemos
+  // (alta por token). CRÍTICO: el nonce debe salir de `makeChallenge()` para
+  // que quede registrado (rememberNonce); si no, cuando el peer responda,
+  // `verifyResponse` lo rechaza por `isFreshNonce` y el contacto NUNCA se agrega.
+  const sendChallenge = async (token) => {
+    try {
+      const id = await getIdentity()
+      if (!id) return
+      const { nonce } = await id.makeChallenge()
+      await connection.sendMessage([token], formatMessage('IDENTIFY_CHALLENGE', { nonce }))
+    } catch (e) { console.warn('sendChallenge:', e) }
+  }
+
   const buildHello = async () => {
     const id = await getIdentity()
     if (!id) return null
@@ -648,7 +661,7 @@ export const useThreadsStore = defineStore('threads', () => {
   return {
     threads, activePubkey, activeThread, activeContact, outbox, lastIncomingDM,
     setActive, sendDM, flushOutbox,
-    handleIncoming, sendHello, sendHelloByPubkey, tryHandshake,
+    handleIncoming, sendHello, sendHelloByPubkey, tryHandshake, sendChallenge,
     askRatingsAbout, load, rememberAlias,
     requests, acceptRequest, dismissRequest
   }

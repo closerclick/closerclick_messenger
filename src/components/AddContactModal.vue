@@ -32,7 +32,10 @@ const submit = async () => {
     // handshake y se promueva a contacto (antes el campo se ignoraba).
     threads.rememberAlias(tk, (nicknameInput.value || '').trim())
     await threads.sendHello(tk)
-    await connection.wsProxyClient.send([tk], 'IDENTIFY_CHALLENGE|' + JSON.stringify({ nonce: 'probe-' + Date.now() }))
+    // Challenge con nonce REGISTRADO por el vault (makeChallenge). Antes se
+    // mandaba un nonce 'probe-' a mano que el vault no reconocía → la respuesta
+    // del peer se rechazaba (isFreshNonce) y el contacto no se agregaba nunca.
+    await threads.sendChallenge(tk)
     emit('close')
   } catch (e) {
     error.value = e.message || 'Error enviando saludo'
