@@ -104,10 +104,15 @@ export const useConnectionStore = defineStore('connection', () => {
       console.warn('vault me.publickey no disponible — saltando identify')
       return
     }
+    // Fijar myPublickey ANTES de identify: el proxy drena la cola offline
+    // (frames `message`) ANTES de responder `identified`, así que esos mensajes
+    // llegan a handleDM mientras identify() aún no resolvió. Si myPublickey
+    // siguiera en null, decrypt() usaría la wrap key equivocada y los mensajes
+    // offline se descartarían silenciosamente ("decrypt failed").
+    myPublickey.value = publickey
     const data = { op: 'identify', publickey, token: token.value, ts: Date.now() }
     const { signature } = await id.signData(data)
     const result = await wsProxyClient.identify({ data, signature })
-    myPublickey.value = publickey
     queuedDelivered.value = result?.queued_delivered || 0
     // Si el usuario activó notificaciones, re-registrar la push subscription
     // (los endpoints pueden rotar). Silencioso si no optó o falta permiso.
