@@ -4,9 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
-    // `closer-click-support` es un Web Component (custom element), no un
-    // componente Vue: que el compilador no intente resolverlo como tal.
-    vue({ template: { compilerOptions: { isCustomElement: (tag) => tag === 'closer-click-support' } } }),
+    // Los `closer-click-*` son Web Components (custom elements), no componentes
+    // Vue: que el compilador no intente resolverlos como tal.
+    vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('closer-click-') } } }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
