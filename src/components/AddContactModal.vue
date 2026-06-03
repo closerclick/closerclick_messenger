@@ -28,6 +28,9 @@ const submit = async () => {
     return
   }
   try {
+    // Recordamos el apodo elegido para aplicarlo cuando el peer responda al
+    // handshake y se promueva a contacto (antes el campo se ignoraba).
+    threads.rememberAlias(tk, (nicknameInput.value || '').trim())
     await threads.sendHello(tk)
     await connection.wsProxyClient.send([tk], 'IDENTIFY_CHALLENGE|' + JSON.stringify({ nonce: 'probe-' + Date.now() }))
     emit('close')

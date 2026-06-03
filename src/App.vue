@@ -10,8 +10,10 @@ import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
 import SyncSettingsModal from './components/SyncSettingsModal.vue'
+import NotificationSettingsModal from './components/NotificationSettingsModal.vue'
 import HelpTip from './components/HelpTip.vue'
 import IncomingNotification from './components/IncomingNotification.vue'
+import { useNotifPrefsStore } from './stores/notifPrefsStore'
 import { getIdentity } from './services/identity'
 import { isDisplayed, markDisplayed } from './services/displayedMessages'
 
@@ -39,10 +41,33 @@ const dismissTip = () => {
 const connection = useConnectionStore()
 const contacts = useContactsStore()
 const threads = useThreadsStore()
+const notifPrefs = useNotifPrefsStore()
 
 const showAdd = ref(false)
 const showSync = ref(false)
+const showNotif = ref(false)
 const ratingFor = ref(null)
+
+// Cantidad de solicitudes pendientes — para el badge de la campana.
+const requestCount = computed(() => threads.requests.requests.length)
+
+// Pitido corto (WebAudio, sin assets) al notificar, si el usuario lo dejó on.
+const playBeep = () => {
+  if (!notifPrefs.prefs.sound) return
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    const o = ctx.createOscillator(); const g = ctx.createGain()
+    o.type = 'sine'; o.frequency.value = 880
+    o.connect(g); g.connect(ctx.destination)
+    g.gain.setValueAtTime(0.0001, ctx.currentTime)
+    g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25)
+    o.start(); o.stop(ctx.currentTime + 0.26)
+    o.onended = () => { try { ctx.close() } catch (_) {} }
+  } catch (_) { /* autoplay bloqueado hasta interacción: ignorar */ }
+}
 
 // Notificación centrada de DM entrante. Solo el primer contexto que vea un
 // DM nuevo (chequeo atómico contra `cc-displayed-msgs-v1` en chrome.storage)
@@ -56,6 +81,7 @@ watch(() => threads.lastIncomingDM, async (dm) => {
   const wasNew = await markDisplayed(dm.id)
   if (!wasNew) return  // otra pestaña ya lo mostró
   incomingNotification.value = dm
+  playBeep()
 })
 // En mobile, si ya hay conversación restaurada del refresh, abrimos directo
 // el panel de chat; si no, mostramos la lista de contactos.
@@ -237,7 +263,17 @@ const openMessengerTab = () => {
           <span class="who">@{{ connection.nickname }}</span>
           <code class="tok" v-if="connection.token">{{ connection.token }}</code>
         </div>
+        <button class="bell-btn" @click="showNotif = true" title="Notificaciones y solicitudes">
+          🔔
+          <span v-if="requestCount" class="bell-badge">{{ requestCount }}</span>
+        </button>
         <button class="me-avatar" @click="showSync = true" :title="'Tu cuenta'">{{ initials(connection.nickname) }}</button>
+        <closer-click-support
+          class="topbar-coin"
+          href="https://ko-fi.com/closerclick"
+          repo="closerclick/closerclick_messenger"
+          discord="https://discord.gg/D648uq7cth"
+        ></closer-click-support>
       </div>
     </header>
 
@@ -271,6 +307,7 @@ const openMessengerTab = () => {
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
     <SyncSettingsModal v-if="showSync" @close="showSync = false" />
+    <NotificationSettingsModal v-if="showNotif" @close="showNotif = false" />
 
     <HelpTip
       v-if="currentTip && connection.token"
@@ -382,6 +419,26 @@ const openMessengerTab = () => {
   transition: transform 150ms ease-out, border-color 150ms ease-out;
 }
 .me-avatar:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.topbar-coin { display: inline-flex; align-items: center; }
+
+.bell-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-4); color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer; font-size: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 150ms ease-out, border-color 150ms ease-out;
+}
+.bell-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.bell-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--accent, #2dd4bf); color: #04221d;
+  font-size: 11px; font-weight: 700; line-height: 18px;
+}
 
 .layout { flex: 1; display: flex; min-height: 0; }
 .sidebar {

@@ -15,9 +15,10 @@ const dismiss = (pk) => threads.dismissRequest(pk)
 </script>
 
 <template>
-  <div v-if="list.length" class="requests">
-    <div class="req-head">Solicitudes <span class="count">{{ list.length }}</span></div>
-    <ul class="req-list">
+  <div class="requests">
+    <div class="req-head">Solicitudes de contacto <span v-if="list.length" class="count">{{ list.length }}</span></div>
+    <p v-if="!list.length" class="req-empty">No tienes solicitudes pendientes.</p>
+    <ul v-else class="req-list">
       <li v-for="r in list" :key="r.pubkey" class="req" :class="{ vouched: r.vouched }">
         <div class="req-info">
           <div class="req-name">
@@ -25,7 +26,7 @@ const dismiss = (pk) => threads.dismissRequest(pk)
             <span v-if="r.vouched" class="vouch" title="Avalado por tu red de confianza">avalado por tu red</span>
             <span v-else class="stranger" title="Desconocido, sin aval de tu red">desconocido</span>
           </div>
-          <div class="req-msg">{{ r.text }}</div>
+          <div class="req-msg">{{ r.text || 'Quiere agregarte como contacto' }}</div>
         </div>
         <div class="req-actions">
           <button class="ok" @click="accept(r.pubkey)" title="Aceptar y agregar a contactos">✓</button>
@@ -38,6 +39,7 @@ const dismiss = (pk) => threads.dismissRequest(pk)
 
 <style scoped>
 .requests { border-bottom: 1px solid var(--line, #2a3550); }
+.req-empty { font-size: 12.5px; color: var(--muted, #8aa0bd); padding: 4px 12px 12px; margin: 0; }
 .req-head {
   font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
   color: var(--muted, #8aa0bd); padding: 10px 12px 6px; display: flex; align-items: center; gap: 6px;

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useConnectionStore } from './connectionStore'
 import { useContactsStore } from './contactsStore'
 import { useRequestsStore } from './requestsStore'
+import { useNotifPrefsStore } from './notifPrefsStore'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
 import { getReputation } from '../services/reputation'
@@ -14,6 +15,9 @@ import { pushThreadsToBridge, pullThreadsFromBridge, onThreadsChanged } from '..
 // memoria, esta sesión (las solicitudes durables viven en requestsStore).
 const pendingPeers = new Map()    // pubkey -> { encryptionPubkey, token, nickname }
 const pendingByToken = new Map()  // token  -> pubkey
+// Apodo elegido al agregar por token (AddContactModal): token -> nickname. Se
+// aplica al promover el peer a contacto tras el handshake.
+const pendingAliasByToken = new Map()
 
 // "Avalado por tu red": alguien en quien confiás (directo/transitivo) tiene una
 // atestación sobre este pubkey. Si sí → la solicitud notifica; si no → silenciosa.
@@ -61,6 +65,19 @@ export const useThreadsStore = defineStore('threads', () => {
   const connection = useConnectionStore()
   const contacts = useContactsStore()
   const requests = useRequestsStore()
+  const notifPrefs = useNotifPrefsStore()
+
+  // Dispara la notificación in-app (App.vue observa lastIncomingDM) respetando
+  // las preferencias del panel. `kind`: 'message' | 'request' | 'hello'.
+  const notify = (kind, dm, vouched = false) => {
+    if (!notifPrefs.shouldNotify(kind, vouched)) return
+    lastIncomingDM.value = dm
+  }
+
+  // Apodo recordado al "Enviar saludo" desde AddContactModal.
+  const rememberAlias = (token, nickname) => {
+    if (token && nickname) pendingAliasByToken.set(token, nickname)
+  }
 
   const threads = ref(loadLocalCache())   // hidratación inmediata desde cache local
   const ACTIVE_KEY = 'messenger_active_pubkey_v1'
@@ -344,6 +361,29 @@ export const useThreadsStore = defineStore('threads', () => {
       if (fromToken) pendingByToken.set(fromToken, payload.pubkey)
       contacts.markOnline(payload.pubkey, fromToken)
       sendHello(fromToken)
+      // Alguien te está agregando: lo dejamos VISIBLE en Solicitudes aunque
+      // todavía no mande un mensaje (antes solo quedaba en memoria y no se veía
+      // nada). Idempotente por pubkey; si luego llega un DM, se actualiza el texto.
+      const vouched = await isVouched(payload.pubkey)
+      requests.upsert({
+        pubkey: payload.pubkey,
+        nickname: payload.nickname || '',
+        encryptionPubkey: payload.encryptionPubkey || null,
+        token: fromToken,
+        text: '',
+        ts: Date.now(),
+        vouched,
+        hello: true
+      })
+      notify('hello', {
+        id: 'hello-' + payload.pubkey,
+        fromPubkey: payload.pubkey,
+        fromNickname: payload.nickname || payload.pubkey.slice(0, 8),
+        text: '',
+        ts: Date.now(),
+        request: true,
+        hello: true
+      }, vouched)
     }
   }
 
@@ -367,11 +407,17 @@ export const useThreadsStore = defineStore('threads', () => {
       if (!result.ok) return
       const pubkey = result.publickey
       const encryptionPubkey = result.encryptionPubkey || payload.encryptionPubkey || null
-      // Promote to contact (or refresh if already there)
+      // Promote to contact (or refresh if already there). Si lo agregamos por
+      // token, aplicamos el apodo elegido en el modal.
+      const alias = contacts.findByPubkey(pubkey)?.nickname || pendingAliasByToken.get(fromToken)
       contacts.addContact({
         pubkey, token: fromToken, encryptionPubkey,
-        nickname: contacts.findByPubkey(pubkey)?.nickname
+        nickname: alias
       })
+      pendingAliasByToken.delete(fromToken)
+      // Ya es contacto: si había una solicitud pendiente suya (p.ej. de su
+      // HELLO), la quitamos de la bandeja para no dejar un duplicado.
+      requests.remove(pubkey)
       contacts.markOnline(pubkey, fromToken)
       contacts.refreshPeers()
       flushOutbox()
@@ -439,22 +485,23 @@ export const useThreadsStore = defineStore('threads', () => {
         // queda en silencio y se purga a las 24h.
         const vouched = await isVouched(senderPubkey)
         requests.upsert({ pubkey: senderPubkey, nickname: senderNick, encryptionPubkey: senderEnc, token: fromToken, text: cleanText, ts, vouched })
-        if (vouched) {
-          lastIncomingDM.value = { id: mid, fromPubkey: senderPubkey, fromNickname: senderNick || senderPubkey.slice(0, 8), text: cleanText, ts, request: true }
-        }
+        // Notifica según preferencias (por defecto TODAS las solicitudes; el
+        // panel deja apagar las de desconocidos). El aval solo cambia jerarquía.
+        notify('request', { id: mid, fromPubkey: senderPubkey, fromNickname: senderNick || senderPubkey.slice(0, 8), text: cleanText, ts, request: true, vouched }, vouched)
       } else {
         const entry = { id: mid, dir: 'in', text: cleanText, ts, queued: !!meta.queued, queuedAt: meta.queuedAt || null }
         append(senderPubkey, entry)
 
         // Notifica a la UI para mostrar la notificación centrada (App.vue
         // observa `lastIncomingDM` y aplica el fade in/out + mark-as-displayed).
-        lastIncomingDM.value = {
+        // Respeta la preferencia de mensajes de contactos del panel.
+        notify('message', {
           id: mid,
           fromPubkey: senderPubkey,
           fromNickname: senderNick || senderPubkey.slice(0, 8),
           text: cleanText,
           ts
-        }
+        })
 
         // Si el PWA está embebido (extensión / future apps), notifica al parent
         // para que pueda disparar toast/notificación nativa.
@@ -602,7 +649,7 @@ export const useThreadsStore = defineStore('threads', () => {
     threads, activePubkey, activeThread, activeContact, outbox, lastIncomingDM,
     setActive, sendDM, flushOutbox,
     handleIncoming, sendHello, sendHelloByPubkey, tryHandshake,
-    askRatingsAbout, load,
+    askRatingsAbout, load, rememberAlias,
     requests, acceptRequest, dismissRequest
   }
 })
