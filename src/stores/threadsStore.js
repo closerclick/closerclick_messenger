@@ -15,6 +15,13 @@ import { pushThreadsToBridge, pullThreadsFromBridge, onThreadsChanged } from '..
 // memoria, esta sesión (las solicitudes durables viven en requestsStore).
 const pendingPeers = new Map()    // pubkey -> { encryptionPubkey, token, nickname }
 const pendingByToken = new Map()  // token  -> pubkey
+// Tokens a los que ya respondimos un HELLO esta sesión. Evita la "tormenta de
+// HELLO": handleHello respondía con sendHello a CADA HELLO recibido, y como un
+// HELLO de respuesta es a su vez un HELLO, dos contactos online entraban en
+// ping-pong infinito. Respondiendo ≤1 vez por token remoto el loop no se
+// sostiene (aunque el otro lado sea una versión vieja que siga haciendo eco).
+// Los tokens son efímeros por conexión: una reconexión trae token nuevo → re-saludo.
+const greetedTokens = new Set()
 // Apodo elegido al agregar por token (AddContactModal): token -> nickname. Se
 // aplica al promover el peer a contacto tras el handshake.
 const pendingAliasByToken = new Map()
@@ -327,6 +334,15 @@ export const useThreadsStore = defineStore('threads', () => {
     } catch (e) { console.warn('sendHelloByPubkey:', e) }
   }
 
+  // Responder un HELLO al peer, pero SOLO una vez por token (anti-tormenta de
+  // HELLO). El saludo proactivo (announceToKnown / handshake) NO pasa por acá:
+  // esto es exclusivamente el "eco" de respuesta dentro de handleHello.
+  const greetBack = (token) => {
+    if (!token || greetedTokens.has(token)) return
+    greetedTokens.add(token)
+    sendHello(token)
+  }
+
   // ------------------------------------------------------------------------
   // Inbound dispatch
   // ------------------------------------------------------------------------
@@ -360,7 +376,7 @@ export const useThreadsStore = defineStore('threads', () => {
       })
       contacts.markOnline(payload.pubkey, fromToken)
       flushOutbox()
-      sendHello(fromToken)
+      greetBack(fromToken)
     } else {
       // Desconocido: NO se auto-agrega al vault. Guardamos su encryptionPubkey
       // en memoria para poder descifrar su DM y rutearlo a Solicitudes. Le
@@ -373,7 +389,7 @@ export const useThreadsStore = defineStore('threads', () => {
       })
       if (fromToken) pendingByToken.set(fromToken, payload.pubkey)
       contacts.markOnline(payload.pubkey, fromToken)
-      sendHello(fromToken)
+      greetBack(fromToken)
       // Alguien te está agregando: lo dejamos VISIBLE en Solicitudes aunque
       // todavía no mande un mensaje (antes solo quedaba en memoria y no se veía
       // nada). Idempotente por pubkey; si luego llega un DM, se actualiza el texto.
