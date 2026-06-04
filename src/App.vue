@@ -208,6 +208,17 @@ const onSelectContact = (pubkey) => {
 const backToList = () => { showSidebarMobile.value = true; threads.setActive(null) }
 const openRating = (pubkey) => { ratingFor.value = pubkey }
 
+// "Mi perfil": botón del header (a la izquierda de la moneda de soporte) que abre
+// el MISMO Web Component compartido en modo self con mi identidad del vault.
+const myProfilePk = ref(null)
+const openMyProfile = async () => {
+  try {
+    const id = await getIdentity()
+    const pk = id?.me?.publickey
+    if (pk) myProfilePk.value = pk
+  } catch (_) { /* sin identidad no abre */ }
+}
+
 // Volver unificado (@closerclick/closer-click-nav): el botón físico de Android /
 // gesto de iOS / atrás del navegador / chevron del header cierra el modal abierto
 // o la conversación activa (vuelve a la lista) antes de salir hacia closer.click.
@@ -215,6 +226,7 @@ useBackLayer(showAdd)
 useBackLayer(showSync)
 useBackLayer(showNotif)
 useBackLayer(ratingFor, { onClose: () => { ratingFor.value = null } })
+useBackLayer(myProfilePk, { onClose: () => { myProfilePk.value = null } })
 // La conversación abierta es una "vista": volver regresa a la lista de contactos.
 const convoOpen = computed(() => !!threads.activePubkey)
 useBackLayer(convoOpen, { onClose: backToList })
@@ -281,6 +293,11 @@ const openMessengerTab = () => {
           <span v-if="requestCount" class="bell-badge">{{ requestCount }}</span>
         </button>
         <button class="me-avatar" @click="showSync = true" :title="'Tu cuenta'">{{ initials(connection.nickname) }}</button>
+        <button class="profile-btn" data-testid="my-profile" @click="openMyProfile" title="Mi perfil" aria-label="Mi perfil">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" />
+          </svg>
+        </button>
         <closer-click-support
           class="topbar-coin"
           href="https://ko-fi.com/closerclick"
@@ -319,6 +336,7 @@ const openMessengerTab = () => {
 
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
+    <RatingModal v-if="myProfilePk" :pubkey="myProfilePk" self @close="myProfilePk = null" />
     <SyncSettingsModal v-if="showSync" @close="showSync = false" />
     <NotificationSettingsModal v-if="showNotif" @close="showNotif = false" />
 
@@ -435,6 +453,17 @@ const openMessengerTab = () => {
   transition: transform 150ms ease-out, border-color 150ms ease-out;
 }
 .me-avatar:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+/* "Mi perfil": botón circular ghost a la izquierda de la moneda de soporte. */
+.profile-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; flex-shrink: 0;
+  border-radius: 50%; background: var(--bg-4); color: var(--text);
+  border: 1px solid var(--border); cursor: pointer;
+  transition: transform 150ms ease-out, border-color 150ms ease-out;
+}
+.profile-btn svg { width: 19px; height: 19px; display: block; }
+.profile-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
 
 .topbar-coin { display: inline-flex; align-items: center; }
 

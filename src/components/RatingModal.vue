@@ -11,7 +11,11 @@ import { getReputation } from '../services/reputation'
 import { useContactsStore } from '../stores/contactsStore'
 import { useThreadsStore } from '../stores/threadsStore'
 
-const props = defineProps({ pubkey: { type: String, required: true } })
+const props = defineProps({
+  pubkey: { type: String, required: true },
+  // `self` = mi propio perfil (modo self, sin calificar); por defecto califica a otro.
+  self: { type: Boolean, default: false }
+})
 const emit  = defineEmits(['close'])
 
 const contacts = useContactsStore()
@@ -55,7 +59,7 @@ onBeforeUnmount(() => {
   <closer-click-profile
     ref="el"
     modal
-    mode="edit"
+    :mode="self ? 'self' : 'edit'"
     :pubkey="pubkey"
     :name="name"
     :since="since || undefined"
