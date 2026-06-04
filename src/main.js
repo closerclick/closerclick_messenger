@@ -4,12 +4,19 @@ import { registerSW } from 'virtual:pwa-register'
 import './style.css'
 import App from './App.vue'
 import '@closerclick/closer-click-support'
+import { createBackNav } from '@closerclick/closer-click-nav'
 
 // Modo embed: cuando la PWA se carga como iframe desde la extensión
 // (popup/overlay/offscreen), recibimos `?embed=popup` o similar y aplicamos
 // estilos compactos vía la clase `cc-embed` en el <html>.
 const embed = new URLSearchParams(location.search).get('embed')
 if (embed) document.documentElement.classList.add('cc-embed')
+
+// Navegación "volver" unificada del ecosistema (botón físico de Android / gesto
+// de iOS / atrás del navegador / chevron del header → cierra modal o conversación,
+// y si no hay nada → closer.click). No en iframe embebido: ahí no manejamos el
+// history del padre.
+if (!embed || window === window.top) createBackNav()
 
 // Diagnóstico: imprime contexto al arrancar. Útil para entender si estamos
 // en secure context, qué origen tenemos, quién es el top-level, etc.

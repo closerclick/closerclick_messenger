@@ -16,6 +16,7 @@ import IncomingNotification from './components/IncomingNotification.vue'
 import { useNotifPrefsStore } from './stores/notifPrefsStore'
 import { getIdentity } from './services/identity'
 import { isDisplayed, markDisplayed } from './services/displayedMessages'
+import { useBackLayer } from '@closerclick/closer-click-nav/vue'
 
 const booting = ref(true)
 
@@ -207,6 +208,17 @@ const onSelectContact = (pubkey) => {
 const backToList = () => { showSidebarMobile.value = true; threads.setActive(null) }
 const openRating = (pubkey) => { ratingFor.value = pubkey }
 
+// Volver unificado (@closerclick/closer-click-nav): el botón físico de Android /
+// gesto de iOS / atrás del navegador / chevron del header cierra el modal abierto
+// o la conversación activa (vuelve a la lista) antes de salir hacia closer.click.
+useBackLayer(showAdd)
+useBackLayer(showSync)
+useBackLayer(showNotif)
+useBackLayer(ratingFor, { onClose: () => { ratingFor.value = null } })
+// La conversación abierta es una "vista": volver regresa a la lista de contactos.
+const convoOpen = computed(() => !!threads.activePubkey)
+useBackLayer(convoOpen, { onClose: backToList })
+
 // avatar initials helper
 const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase()
 
@@ -250,6 +262,7 @@ const openMessengerTab = () => {
 
   <div v-else class="app">
     <header class="topbar">
+      <closer-click-back class="cc-back" lang="es"></closer-click-back>
       <div class="brand">
         <img class="logo" src="/icons/icon-192.png" alt="Closer Click" />
         <span class="brand-name">Closer Click</span>
@@ -352,13 +365,16 @@ const openMessengerTab = () => {
 .login-card .btn { width: 100%; }
 
 .topbar {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center; gap: 12px;
   padding: 12px 20px;
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+/* Chevron de volver (Web Component @closerclick/closer-click-nav). */
+.cc-back { color: var(--text, currentColor); --cc-back-size: 38px; margin-left: -6px; }
 .brand { display: flex; align-items: center; gap: 12px; }
+.status { margin-left: auto; }
 .logo {
   width: 36px; height: 36px;
   object-fit: contain;

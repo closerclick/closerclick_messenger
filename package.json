@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@closerclick/closer-click-identity": "^0.8.0",
+    "@closerclick/closer-click-nav": "0.2.0",
     "@closerclick/closer-click-profile": "0.1.1",
     "@closerclick/closer-click-proxy-client": "^0.6.0",
     "@closerclick/closer-click-reputation": "0.3.1",
