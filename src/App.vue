@@ -9,10 +9,10 @@ import RequestsInbox from './components/RequestsInbox.vue'
 import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
-import NotificationSettingsModal from './components/NotificationSettingsModal.vue'
 import HelpTip from './components/HelpTip.vue'
 import IncomingNotification from './components/IncomingNotification.vue'
-import { useNotifPrefsStore } from './stores/notifPrefsStore'
+import '@closerclick/closer-click-notifications'
+import { getNotifications, notifSoundEnabled } from './services/notifications'
 import { getIdentity } from './services/identity'
 import { isDisplayed, markDisplayed } from './services/displayedMessages'
 import { useBackLayer } from '@closerclick/closer-click-nav/vue'
@@ -41,18 +41,19 @@ const dismissTip = () => {
 const connection = useConnectionStore()
 const contacts = useContactsStore()
 const threads = useThreadsStore()
-const notifPrefs = useNotifPrefsStore()
-
 const showAdd = ref(false)
 const showNotif = ref(false)
 const ratingFor = ref(null)
+
+// Panel de notificaciones = Web Component compartido <closer-click-notifications>.
+const bindNotif = (el) => { if (el) el.controller = getNotifications() }
 
 // Cantidad de solicitudes pendientes — para el badge de la campana.
 const requestCount = computed(() => threads.requests.requests.length)
 
 // Pitido corto (WebAudio, sin assets) al notificar, si el usuario lo dejó on.
 const playBeep = () => {
-  if (!notifPrefs.prefs.sound) return
+  if (!notifSoundEnabled()) return
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext
     if (!Ctx) return
@@ -330,7 +331,7 @@ const openMessengerTab = () => {
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
     <RatingModal v-if="myProfilePk" :pubkey="myProfilePk" self @close="myProfilePk = null" />
-    <NotificationSettingsModal v-if="showNotif" @close="showNotif = false" />
+    <closer-click-notifications v-if="showNotif" :ref="bindNotif" modal @cc-notif-close="showNotif = false"></closer-click-notifications>
 
     <HelpTip
       v-if="currentTip && connection.token"

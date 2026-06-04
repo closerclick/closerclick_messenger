@@ -116,8 +116,8 @@ export const useConnectionStore = defineStore('connection', () => {
     queuedDelivered.value = result?.queued_delivered || 0
     // Si el usuario activó notificaciones, re-registrar la push subscription
     // (los endpoints pueden rotar). Silencioso si no optó o falta permiso.
-    import('./notificationsStore.js')
-      .then(m => m.useNotificationsStore().ensureSubscribed())
+    import('../services/notifications.js')
+      .then(m => m.ensurePushSubscribed())
       .catch(() => {})
     return result
   }

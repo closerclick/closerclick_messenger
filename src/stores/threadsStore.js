@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useConnectionStore } from './connectionStore'
 import { useContactsStore } from './contactsStore'
 import { useRequestsStore } from './requestsStore'
-import { useNotifPrefsStore } from './notifPrefsStore'
+import { shouldNotifyKind } from '../services/notifications'
 import { getIdentity } from '../services/identity'
 import { getStore } from '../services/store'
 import { getReputation } from '../services/reputation'
@@ -72,12 +72,11 @@ export const useThreadsStore = defineStore('threads', () => {
   const connection = useConnectionStore()
   const contacts = useContactsStore()
   const requests = useRequestsStore()
-  const notifPrefs = useNotifPrefsStore()
 
   // Dispara la notificación in-app (App.vue observa lastIncomingDM) respetando
-  // las preferencias del panel. `kind`: 'message' | 'request' | 'hello'.
+  // las preferencias del panel compartido. `kind`: 'message' | 'request' | 'hello'.
   const notify = (kind, dm, vouched = false) => {
-    if (!notifPrefs.shouldNotify(kind, vouched)) return
+    if (!shouldNotifyKind(kind, vouched)) return
     lastIncomingDM.value = dm
   }
 
