@@ -9,7 +9,6 @@ import RequestsInbox from './components/RequestsInbox.vue'
 import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
-import SyncSettingsModal from './components/SyncSettingsModal.vue'
 import NotificationSettingsModal from './components/NotificationSettingsModal.vue'
 import HelpTip from './components/HelpTip.vue'
 import IncomingNotification from './components/IncomingNotification.vue'
@@ -45,7 +44,6 @@ const threads = useThreadsStore()
 const notifPrefs = useNotifPrefsStore()
 
 const showAdd = ref(false)
-const showSync = ref(false)
 const showNotif = ref(false)
 const ratingFor = ref(null)
 
@@ -223,16 +221,12 @@ const openMyProfile = async () => {
 // gesto de iOS / atrás del navegador / chevron del header cierra el modal abierto
 // o la conversación activa (vuelve a la lista) antes de salir hacia closer.click.
 useBackLayer(showAdd)
-useBackLayer(showSync)
 useBackLayer(showNotif)
 useBackLayer(ratingFor, { onClose: () => { ratingFor.value = null } })
 useBackLayer(myProfilePk, { onClose: () => { myProfilePk.value = null } })
 // La conversación abierta es una "vista": volver regresa a la lista de contactos.
 const convoOpen = computed(() => !!threads.activePubkey)
 useBackLayer(convoOpen, { onClose: backToList })
-
-// avatar initials helper
-const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase()
 
 // Modo overlay: storage particionado, no podemos crear identidad útil aquí.
 // Si no llega blob por el bridge, mostramos un CTA al messenger directo en vez
@@ -292,7 +286,6 @@ const openMessengerTab = () => {
           🔔
           <span v-if="requestCount" class="bell-badge">{{ requestCount }}</span>
         </button>
-        <button class="me-avatar" @click="showSync = true" :title="'Tu cuenta'">{{ initials(connection.nickname) }}</button>
         <button class="profile-btn" data-testid="my-profile" @click="openMyProfile" title="Mi perfil" aria-label="Mi perfil">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" />
@@ -337,7 +330,6 @@ const openMessengerTab = () => {
     <AddContactModal v-if="showAdd" @close="showAdd = false" />
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
     <RatingModal v-if="myProfilePk" :pubkey="myProfilePk" self @close="myProfilePk = null" />
-    <SyncSettingsModal v-if="showSync" @close="showSync = false" />
     <NotificationSettingsModal v-if="showNotif" @close="showNotif = false" />
 
     <HelpTip
@@ -440,19 +432,6 @@ const openMessengerTab = () => {
   transition: background 150ms ease-out;
 }
 .install-btn:hover { background: rgba(192, 57, 43, 0.08); }
-
-.me-avatar {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: var(--bg-4); color: var(--text);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-family: var(--font-headline);
-  font-weight: 600;
-  font-size: 13px;
-  transition: transform 150ms ease-out, border-color 150ms ease-out;
-}
-.me-avatar:hover { border-color: var(--accent); transform: translateY(-1px); }
 
 /* "Mi perfil": botón circular ghost a la izquierda de la moneda de soporte. */
 .profile-btn {
