@@ -34,7 +34,7 @@ const togglePush = async () => {
       </header>
 
       <div class="body">
-        <p class="intro">Elegí qué querés que te avise la app mientras está abierta.</p>
+        <p class="intro">Elige qué quieres que te avise la app mientras está abierta.</p>
 
         <ul class="opts">
           <li v-for="it in ITEMS" :key="it.key" class="opt">

@@ -230,7 +230,7 @@ function vaultStatus (s) {
               <div class="notif-title">Servidor (proxio)</div>
               <div class="notif-sub">
                 Tu nodo de transporte. Los proxios están <strong>federados</strong>:
-                cambiar de nodo no te aísla — seguís alcanzando contactos en otros.
+                cambiar de nodo no te aísla — sigues alcanzando contactos en otros.
               </div>
             </div>
             <span :class="['conn-dot', { on: conn.isConnected }]" :title="conn.isConnected ? 'conectado' : 'desconectado'"></span>
@@ -262,7 +262,7 @@ function vaultStatus (s) {
             <div>
               <div class="notif-title">Notificaciones</div>
               <div class="notif-sub">
-                Recibí un aviso cuando te llegan mensajes con la app cerrada. El
+                Recibe un aviso cuando te llegan mensajes con la app cerrada. El
                 contenido viaja cifrado por el proxy; el aviso no lleva tus datos.
               </div>
             </div>
@@ -276,7 +276,7 @@ function vaultStatus (s) {
             </button>
           </div>
           <p v-if="!notif.supported" class="notif-note">
-            Tu navegador no soporta notificaciones push. En iOS, instalá la app
+            Tu navegador no soporta notificaciones push. En iOS, instala la app
             en la pantalla de inicio primero.
           </p>
           <p v-else-if="notif.permission === 'denied'" class="notif-note">
