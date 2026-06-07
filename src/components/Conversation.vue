@@ -135,6 +135,7 @@ const grouped = computed(() => {
         v-model="text"
         rows="1"
         placeholder="Escribe un mensaje…"
+        data-testid="composer-input"
         @keydown.enter.exact.prevent="send"
       />
       <button class="send" :disabled="!text.trim()" type="submit" title="Enviar">

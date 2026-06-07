@@ -65,7 +65,7 @@ const pasteToken = async () => {
       <div class="body">
         <div class="tabs">
           <button :class="['tab', tab === 'add'  && 'active']" @click="tab = 'add'">🔗 Por token</button>
-          <button :class="['tab', tab === 'mine' && 'active']" @click="tab = 'mine'">📤 Mi token</button>
+          <button :class="['tab', tab === 'mine' && 'active']" @click="tab = 'mine'" data-testid="share-my-token-tab">📤 Mi token</button>
         </div>
 
         <div v-if="tab === 'add'" class="tab-pane">

@@ -75,6 +75,7 @@ const fmtTime = (ts) => {
       v-for="c in items"
       :key="c.publickey"
       class="item"
+      data-testid="contact-item"
       :class="{ active: threads.activePubkey === c.publickey }"
       @click="emit('select', c.publickey)"
     >

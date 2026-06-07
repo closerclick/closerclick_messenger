@@ -4,6 +4,8 @@ import { registerSW } from 'virtual:pwa-register'
 import './style.css'
 import App from './App.vue'
 import '@closerclick/closer-click-support'
+import '@closerclick/closer-click-install'
+import '@closerclick/closer-click-tutorial'
 import { createBackNav } from '@closerclick/closer-click-nav'
 
 // Modo embed: cuando la PWA se carga como iframe desde la extensión

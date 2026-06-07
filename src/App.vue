@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { useConnectionStore } from './stores/connectionStore'
 import { useContactsStore } from './stores/contactsStore'
 import { useThreadsStore } from './stores/threadsStore'
@@ -9,7 +9,7 @@ import RequestsInbox from './components/RequestsInbox.vue'
 import Conversation from './components/Conversation.vue'
 import AddContactModal from './components/AddContactModal.vue'
 import RatingModal from './components/RatingModal.vue'
-import HelpTip from './components/HelpTip.vue'
+import { startAppTutorial } from './lib/tutorial'
 import IncomingNotification from './components/IncomingNotification.vue'
 import '@closerclick/closer-click-notifications'
 import { getNotifications, notifSoundEnabled } from './services/notifications'
@@ -19,24 +19,9 @@ import { useBackLayer } from '@closerclick/closer-click-nav/vue'
 
 const booting = ref(true)
 
-const HELP_TIPS = [
-  {
-    id: 'token-share',
-    targetSelector: '.me .tok',
-    message: 'Este token es necesario para que otros usuarios te puedan agregar como contacto.',
-    placement: 'bottom',
-    when: () => !!document.querySelector('.me .tok')
-  }
-]
-const HELP_KEY = 'cc_help_seen_v1'
-const seenHelp = ref(new Set(JSON.parse(localStorage.getItem(HELP_KEY) || '[]')))
-const currentTip = computed(() => HELP_TIPS.find(t => !seenHelp.value.has(t.id) && (t.when ? t.when() : true)) || null)
-const dismissTip = () => {
-  if (!currentTip.value) return
-  seenHelp.value.add(currentTip.value.id)
-  localStorage.setItem(HELP_KEY, JSON.stringify([...seenHelp.value]))
-  seenHelp.value = new Set(seenHelp.value)
-}
+// El antiguo HelpTip ad-hoc (un solo coach-mark sobre el token) fue reemplazado
+// por el tutorial guiado compartido (@closerclick/closer-click-tutorial); su
+// mensaje del token vive ahora en el paso 'token' de src/lib/tutorial.js.
 
 const connection = useConnectionStore()
 const contacts = useContactsStore()
@@ -87,43 +72,7 @@ watch(() => threads.lastIncomingDM, async (dm) => {
 // el panel de chat; si no, mostramos la lista de contactos.
 const showSidebarMobile = ref(!threads.activePubkey)
 
-let deferredPrompt = null
-const isStandalone = ref(
-  window.matchMedia('(display-mode: standalone)').matches ||
-  window.navigator.standalone === true
-)
-const canInstall = ref(false)
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
-
-const onBeforeInstallPrompt = (e) => {
-  e.preventDefault()
-  deferredPrompt = e
-  canInstall.value = true
-}
-const onAppInstalled = () => {
-  deferredPrompt = null
-  canInstall.value = false
-  isStandalone.value = true
-}
-const installApp = async () => {
-  if (deferredPrompt) {
-    deferredPrompt.prompt()
-    await deferredPrompt.userChoice
-    deferredPrompt = null
-    canInstall.value = false
-    return
-  }
-  if (isIOS) {
-    alert('Para instalar: pulsa el botón Compartir y luego "Añadir a pantalla de inicio".')
-  } else {
-    alert('Tu navegador todavía no permite la instalación automática. Usa el menú del navegador para instalar la app.')
-  }
-}
-const showInstallButton = computed(() => !isStandalone.value && (canInstall.value || isIOS))
-
 onMounted(async () => {
-  window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
-  window.addEventListener('appinstalled', onAppInstalled)
   // Bootstrap: fuerza el getIdentity() inicial para que en modo iframe el
   // bridge intente hidratar el vault desde chrome.storage.local antes de
   // decidir si mostramos NicknameModal o CTA. Si la vault tiene me.nickname
@@ -176,11 +125,7 @@ onMounted(async () => {
     await connection.connect()
     await contacts.refreshPeers()
   }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
-  window.removeEventListener('appinstalled', onAppInstalled)
+  maybeStartTutorial()
 })
 
 // Avisamos a todos los contactos por pubkey: si están conectados el proxy
@@ -197,6 +142,7 @@ const handleNicknameSet = async (nick) => {
   await connection.connect()
   await contacts.refreshPeers()
   setTimeout(announceToKnown, 500)
+  maybeStartTutorial()
 }
 
 const onSelectContact = (pubkey) => {
@@ -243,6 +189,22 @@ const openMessengerTab = () => {
   try { window.open('https://messenger.closer.click/', '_blank', 'noopener') }
   catch (_) { location.href = 'https://messenger.closer.click/' }
 }
+
+// Tutorial guiado (una sola vez por dispositivo). Solo en la app real: con apodo,
+// fuera del overlay/iframe, y en visita "limpia" (sin enlace entrante).
+const maybeStartTutorial = () => {
+  if (isReadOnlyEmbed || blockedByInsecureTop) return
+  if (typeof window !== 'undefined' && window.self !== window.top) return
+  if ((location.hash || '').replace(/^#/, '')) return
+  if (!connection.nicknameSet) return
+  startAppTutorial({
+    lang: () => 'es',
+    openAdd: (b) => { showAdd.value = b },
+    setSidebarMobile: (b) => { showSidebarMobile.value = b },
+    hasContact: () => contacts.contacts.length > 0,
+    openConvo: () => { const c = contacts.contacts[0]; if (c) onSelectContact(c.publickey) },
+  })
+}
 </script>
 
 <template>
@@ -275,13 +237,11 @@ const openMessengerTab = () => {
         <span class="brand-name">Closer Click</span>
       </div>
       <div class="status">
-        <button v-if="showInstallButton" class="install-btn" @click="installApp" title="Instalar como app">
-          ⬇ Instalar
-        </button>
+        <closer-click-install class="cc-install" lang="es"></closer-click-install>
         <div class="me">
           <span :class="['dot', connection.isConnected ? 'on' : 'off']"></span>
           <span class="who">@{{ connection.nickname }}</span>
-          <code class="tok" v-if="connection.token">{{ connection.token }}</code>
+          <code class="tok" v-if="connection.token" data-testid="my-token">{{ connection.token }}</code>
         </div>
         <button class="bell-btn" @click="showNotif = true" title="Notificaciones y solicitudes">
           🔔
@@ -305,7 +265,7 @@ const openMessengerTab = () => {
       <aside class="sidebar">
         <div class="side-head">
           <h3>Contactos</h3>
-          <button class="add-btn" @click="showAdd = true" title="Añadir contacto">+</button>
+          <button class="add-btn" @click="showAdd = true" title="Añadir contacto" data-testid="add-contact">+</button>
         </div>
         <RequestsInbox />
         <ContactList @select="onSelectContact" @rate="openRating" />
@@ -332,15 +292,6 @@ const openMessengerTab = () => {
     <RatingModal v-if="ratingFor" :pubkey="ratingFor" @close="ratingFor = null" />
     <RatingModal v-if="myProfilePk" :pubkey="myProfilePk" self @close="myProfilePk = null" />
     <closer-click-notifications v-if="showNotif" :ref="bindNotif" modal @cc-notif-close="showNotif = false"></closer-click-notifications>
-
-    <HelpTip
-      v-if="currentTip && connection.token"
-      :key="currentTip.id"
-      :target-selector="currentTip.targetSelector"
-      :message="currentTip.message"
-      :placement="currentTip.placement"
-      @dismiss="dismissTip"
-    />
 
     <IncomingNotification :dm="incomingNotification" @done="onIncomingDone" />
   </div>
@@ -421,18 +372,22 @@ const openMessengerTab = () => {
   border: 1px solid var(--border);
 }
 
-.install-btn {
+/* Botón "Instalar App" unificado (Web Component @closerclick/closer-click-install).
+   Reusa el estilo del antiguo .install-btn: ghost con borde y acento de messenger. */
+.cc-install {
+  --cc-install-color: var(--accent);
+  --cc-install-accent: var(--accent);
+  --cc-install-bg-hover: rgba(192, 57, 43, 0.08);
+  --cc-install-radius: 8px;
+  --cc-install-font-size: 13px;
+}
+.cc-install::part(button) {
   background: transparent;
-  color: var(--accent);
   border: 1px solid var(--accent);
   padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
   font-weight: 500;
   transition: background 150ms ease-out;
 }
-.install-btn:hover { background: rgba(192, 57, 43, 0.08); }
 
 /* "Mi perfil": botón circular ghost a la izquierda de la moneda de soporte. */
 .profile-btn {
